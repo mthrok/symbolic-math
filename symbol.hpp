@@ -1,142 +1,193 @@
-#include <map>
-#include <vector>
 #include <string>
+#include <vector>
+#include <memory>
 #include <iostream>
 
-// #define DEBUG
+#define DEBUG
 
+////////////////////////////////////////////////////////////////////////////////
+// Forward Declarations
+////////////////////////////////////////////////////////////////////////////////
 namespace Symbol {
 
   namespace Impl_ {
-    // Symbolic Operation Implementation.
-    class Operation_;
 
-    // Symbolic Operator
-    enum class Operator_;
+    class Expression;
+
   }
 
-  // Symbol Interface.
-  class Variable;
-
-  // Helper functions
-  std::ostream& operator<< (std::ostream &o, const Symbol::Variable &v);
-}
-
-typedef std::shared_ptr<Symbol::Impl_::Operation_> pOperation_;
-
-enum class Symbol::Impl_::Operator_ {
-  CONST, NEGATE, ADD, SUBTRACT, MULTIPLY
+  class Scalar;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-class Symbol::Impl_::Operation_ {
-  static int counter_;
+std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Expression& e);
 
+std::ostream& operator << (std::ostream& o, const Symbol::Scalar& t);
+
+typedef std::shared_ptr<Symbol::Impl_::Expression> pExpression;
+typedef std::vector<pExpression> Operands;
+
+////////////////////////////////////////////////////////////////////////////////
+// Prototype Declarations
+////////////////////////////////////////////////////////////////////////////////
+class Symbol::Impl_::Expression {
   std::string name_;
-
-  Operator_ operator_;
-
-  std::vector<pOperation_> operands_;
+  std::string operator_;
+  Operands operands_;
 public:
-  /** Constructor */
-  // Variable construction
-  Operation_(const std::string name);
-  // Operation construction
-  Operation_(Operator_ op, std::vector<pOperation_> operands);
+  // Initialize as a variable
+  Expression(const std::string name="");
+  // Initialize as a compound expression
+  Expression(const std::string op, Operands operands);
+  Expression(const std::string op, pExpression operand);
 
-  /** Destructor */
-  ~Operation_();
+  /** Differentiation */
+  pExpression differentiate(const pExpression& dx) const;
 
-  /** Differentiate */
-  pOperation_ differentiate(const pOperation_& dx);
+  /** Optimization */
+  bool isOne() const;
+  bool isZero() const;
+  pExpression reduce();
 
-  /** Getter */
-  const std::string id() const;
+  /** Helper Functions */
+  std::string string() const;
 
-private:
-  void printCounter(const std::string &func);
+  friend std::ostream& ::operator << (std::ostream& o, const Expression& e);
 };
-int Symbol::Impl_::Operation_:: counter_ = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
-Symbol::Impl_::Operation_::Operation_(const std::string name)
+class Symbol::Scalar {
+
+  std::shared_ptr<Impl_::Expression> pExp_;
+
+  Scalar(std::shared_ptr<Impl_::Expression> pExp);
+
+public:
+  Scalar(const std::string name);
+
+  /** Arithmetic Operations */
+  Scalar operator - () const;
+  Scalar operator + (const Scalar& other) const;
+  Scalar operator - (const Scalar& other) const;
+  Scalar operator * (const Scalar& other) const;
+  Scalar operator / (const Scalar& other) const;
+
+  /** Differentiation */
+  Scalar differentiate (const Scalar& dx) const;
+
+  /** Optimization */
+  Scalar& optimize();
+
+  /** Helper functions */
+  friend std::ostream& ::operator << (std::ostream& o, const Scalar& t);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Implemantations
+////////////////////////////////////////////////////////////////////////////////
+Symbol::Impl_::Expression::Expression(const std::string name)
   : name_(name)
-  , operator_(Operator_::CONST)
+  , operator_("const")
+  , operands_()
+{}
+
+Symbol::Impl_::Expression::Expression(const std::string op, pExpression operand)
+  : operator_(op)
   , operands_()
 {
-  ++counter_;
-  printCounter(__func__);
+  operands_.push_back(operand);
 }
 
-Symbol::Impl_::Operation_::Operation_(Operator_ op, std::vector<pOperation_> operands)
-  : name_()
-  , operator_(op)
+Symbol::Impl_::Expression::Expression(const std::string op, Operands operands)
+  : operator_(op)
   , operands_(operands)
-{
-  ++counter_;
-  printCounter(__func__);
-}
+{};
 
-Symbol::Impl_::Operation_::~Operation_() {
-  --counter_;
-  printCounter(__func__);
-}
-
-pOperation_ Symbol::Impl_::Operation_::differentiate(const pOperation_ &dx) {
-  if (this->id() == dx.get()->id()) {
-    return std::make_shared<Operation_>("one");
+pExpression Symbol::Impl_::Expression::differentiate(const pExpression& dx) const {
+  if (string() == dx->string()) {
+    return std::make_shared<Expression>("__ONE__");
   }
-  bool found;
-  std::vector<pOperation_> operands;
-  switch(operator_) {
-  case Operator_::CONST:
-    return std::make_shared<Operation_>("zero");
-  case Operator_::MULTIPLY:
-    found = false;
-    for (auto operand_ : operands_) {
-      if (operand_->id() == dx.get()->id()) {
-	found = true;
-	operands.push_back(std::make_shared<Operation_>("one"));
-      } else {
-	operands.push_back(operand_);
+  if ("const" == operator_) {
+    return std::make_shared<Expression>("__ZERO__");
+  }
+  Operands operands;
+  if ("negate" == operator_ || "add" == operator_) {
+    for (auto& operand : operands_) {
+      operands.push_back(operand->differentiate(dx));
+    }
+    return std::make_shared<Expression>(operator_, operands);
+  }
+  if ("multiply" == operator_) {
+    Operands operands0 { operands_[0]->differentiate(dx), operands_[1] };
+    Operands operands1 { operands_[0], operands_[1]->differentiate(dx) };
+    operands.push_back(std::make_shared<Expression>("multiply", operands0));
+    operands.push_back(std::make_shared<Expression>("multiply", operands1));
+    return std::make_shared<Expression>("add", operands);
+  }
+  throw std::runtime_error(std::string(__func__) + ": Not implemented: " + operator_);
+}
+
+bool Symbol::Impl_::Expression::isOne() const { return "__ONE__" == name_; }
+
+bool Symbol::Impl_::Expression::isZero() const { return "__ZERO__" == name_; }
+
+pExpression Symbol::Impl_::Expression::reduce() {
+  bool changed;
+  do {
+    changed = false;
+    for (size_t i = 0; i < operands_.size(); ++i) {
+      pExpression ret = operands_[i]->reduce();
+      if (ret) {
+	operands_[i] = ret;
+	changed = true;
       }
     }
-    if (found) {
-      return std::make_shared<Operation_>(operator_, operands);
-    } else {
-      return std::make_shared<Operation_>("zero");
+  } while (changed);
+  if ("multiply" == operator_) {
+    if (operands_[0]->isZero() || operands_[1]->isZero()) {
+      return std::make_shared<Expression>("__ZERO__");
     }
-  default:
-    for (auto& operand_ : operands_) {
-      operands.push_back(operand_->differentiate(dx));
+    if (operands_[0]->isOne()) { return operands_[1]; }
+    if (operands_[1]->isOne()) { return operands_[0]; }
+    if ("negate" == operands_[0]->operator_) {
+      Operands operands{ operands_[0]->operands_[0], operands_[1] };
+      auto tmp = std::make_shared<Expression>("multiply", operands);
+      return std::make_shared<Expression>("negate", tmp);
     }
-    return std::make_shared<Operation_>(operator_, operands);
+    if ("negate" == operands_[1]->operator_) {
+      Operands operands{ operands_[1]->operands_[0], operands_[0] };
+      auto tmp = std::make_shared<Expression>("multiply", operands);
+      return std::make_shared<Expression>("negate", tmp);
+    }
   }
-}
+  if ("add" == operator_) {
+    if (operands_[0]->isZero()) { return operands_[1]; }
+    if (operands_[1]->isZero()) { return operands_[0]; }
+    if ("negate" == operands_[0]->operator_ &&
+	"negate" == operands_[1]->operator_) {
+      Operands operands{ operands_[0]->operands_[0], operands_[1]->operands_[0]};
+      auto tmp = std::make_shared<Expression>("add", operands);
+      return std::make_shared<Expression>("negate", tmp);
+    }
+  }
+  return NULL;
+};
 
-const std::string Symbol::Impl_::Operation_::id() const {
-  if ("" != name_) {
-    return name_;
-  }
-  std::string ret;
-  switch(operator_) {
-  case Operator_::CONST:
-    ret += "CONST("; break;
-  case Operator_::NEGATE:
-    ret += "NOT("; break;
-  case Operator_::ADD:
-    ret += "ADD("; break;
-  case Operator_::SUBTRACT:
-    ret += "SUBTRACT("; break;
-  case Operator_::MULTIPLY:
-    ret += "MULTIPLY("; break;
-  default:
-    break;
+std::string Symbol::Impl_::Expression::string() const {
+  if ("const" == operator_) { return name_; }
+
+  std::vector<std::string> strings;
+  for (auto& operand : operands_) {
+    strings.push_back(operand->string());
   }
 
-  for (size_t i = 0; i < operands_.size(); ++i) {
-    ret += operands_[i]->id();
-    if (i != operands_.size() -1) {
+  std::sort(strings.begin(), strings.end());
+
+
+  std::string ret = operator_;
+  ret += "(";
+  for (size_t i = 0; i < strings.size(); ++i) {
+    ret += strings[i];
+    if (i != strings.size() - 1) {
       ret += ", ";
     }
   }
@@ -144,102 +195,61 @@ const std::string Symbol::Impl_::Operation_::id() const {
   return ret;
 }
 
-void Symbol::Impl_::Operation_::printCounter(const std::string& func) {
-#ifdef DEBUG
-  std::cout << "    " << func << "(" << id() << "):"
-	    << " counter_ = " << counter_ << std::endl;
-#endif
+std::ostream& operator <<(std::ostream& o, const Symbol::Impl_::Expression& e) {
+  return o << e.string();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Symbol::Variable
-////////////////////////////////////////////////////////////////////////////////
-class Symbol::Variable {
-  std::shared_ptr<Symbol::Impl_::Operation_> pVar_;
+Symbol::Scalar::Scalar(const std::string name)
+  : pExp_(std::make_shared<Impl_::Expression>(name))
+{}
 
-public:
-  // Constructors
-  Variable(const std::string id);
+Symbol::Scalar::Scalar(std::shared_ptr<Impl_::Expression> pExp)
+  : pExp_(pExp)
+{}
 
-  Variable(const Variable &other);
-
-  Variable(pOperation_ pOperation);
-
-  // Arithmetic operations
-  Variable operator - ();
-
-  Variable operator + (const Variable& other);
-
-  Variable operator - (const Variable& other);
-
-  Variable operator * (const Variable& other);
-
-  // Diff
-  Variable differentiate(const Variable& dx);
-
-  // print out
-  friend std::ostream& operator<< (std::ostream &o, const Symbol::Variable &v);
+Symbol::Scalar Symbol::Scalar::operator - () const {
+  auto pExp = std::make_shared<Impl_::Expression>("negate", this->pExp_);
+  return Scalar(pExp);
 };
-/** Constructors **/
-// New variable
-Symbol::Variable::Variable(const std::string id)
-  : pVar_(std::make_shared<Symbol::Impl_::Operation_>(id))
-{}
-// Copy construction
-Symbol::Variable::Variable(const Variable &other)
-  : pVar_(other.pVar_)
-{}
-Symbol::Variable::Variable(pOperation_ pOperation)
-  : pVar_(pOperation)
-{}
 
-/** Arithmetic operations **/
-// Negation
-Symbol::Variable Symbol::Variable::operator - () {
-  std::vector<pOperation_> operands;
-  operands.push_back(this->pVar_);
+Symbol::Scalar Symbol::Scalar::operator + (const Scalar& other) const {
+  Operands operands{this->pExp_, other.pExp_};
+  auto pExp = std::make_shared<Impl_::Expression>("add", operands);
+  return Scalar(pExp);
+};
 
-  auto pOp = std::make_shared<Impl_::Operation_>(Impl_::Operator_::NEGATE, operands);
-  return Variable(pOp);
+Symbol::Scalar Symbol::Scalar::operator - (const Scalar& other) const {
+  Operands operands{this->pExp_, (-other).pExp_};
+  auto pExp = std::make_shared<Impl_::Expression>("add", operands);
+  return Scalar(pExp);
+};
+
+Symbol::Scalar Symbol::Scalar::operator * (const Scalar& other) const {
+  Operands operands{this->pExp_, other.pExp_};
+  auto pExp = std::make_shared<Impl_::Expression>("multiply", operands);
+  return Scalar(pExp);
+};
+
+Symbol::Scalar Symbol::Scalar::operator / (const Scalar& other) const {
+  Operands operands{this->pExp_, other.pExp_};
+  auto pExp = std::make_shared<Impl_::Expression>("divide", operands);
+  return Scalar(pExp);
+};
+
+Symbol::Scalar Symbol::Scalar::differentiate (const Scalar& dx_) const {
+  auto dy = Scalar(this->pExp_).optimize();
+  auto dx = Scalar(dx_.pExp_).optimize();
+
+  auto pExp = dy.pExp_->differentiate(dx.pExp_);
+  pExp->reduce();
+  return Scalar(pExp);
 }
 
-// Addition
-Symbol::Variable Symbol::Variable::operator + (const Variable& other) {
-  std::vector<pOperation_> operands;
-  operands.push_back(this->pVar_);
-  operands.push_back(other.pVar_);
-
-  auto pOp = std::make_shared<Impl_::Operation_>(Impl_::Operator_::ADD, operands);
-  return Variable(pOp);
+Symbol::Scalar& Symbol::Scalar::optimize() {
+  pExp_->reduce(); return *this;
 }
 
-// Subtraction
-Symbol::Variable Symbol::Variable::operator - (const Variable& other) {
-  std::vector<pOperation_> operands;
-  operands.push_back(this->pVar_);
-  operands.push_back(other.pVar_);
-
-  auto pOp = std::make_shared<Impl_::Operation_>(Impl_::Operator_::SUBTRACT, operands);
-  return Variable(pOp);
-}
-
-// Multiplication
-Symbol::Variable Symbol::Variable::operator * (const Variable& other) {
-  std::vector<pOperation_> operands;
-  operands.push_back(this->pVar_);
-  operands.push_back(other.pVar_);
-
-  auto pOp = std::make_shared<Impl_::Operation_>(Impl_::Operator_::MULTIPLY, operands);
-  return Variable(pOp);
-}
-
-/** Differentiate */
-Symbol::Variable Symbol::Variable::differentiate(const Variable& dx) {
-  auto pOp = pVar_->differentiate(dx.pVar_);
-  return Variable(pOp);
-}
-
-/** Print **/
-std::ostream& Symbol::operator << (std::ostream &o, const Symbol::Variable &v) {
-  return o << "Symbolic Variable: " << v.pVar_->id();
+std::ostream& operator << (std::ostream& o, const Symbol::Scalar& t) {
+  return o << t.pExp_->string();
 }

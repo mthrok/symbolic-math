@@ -2,58 +2,24 @@
 
 int main() {
 
-  Symbol::Variable x("x");
-  Symbol::Variable y("y");
-  Symbol::Variable z("z");
+  Symbol::Scalar x1("x1");
+  Symbol::Scalar x2("x2");
+  Symbol::Scalar y1("y1");
+  Symbol::Scalar y2("y2");
 
-  std::cout << x << std::endl;
-  std::cout << y << std::endl;
-  std::cout << "=====" << std::endl;
-  std::cout << -x << std::endl;
-  std::cout << -y << std::endl;
-  std::cout << "=====" << std::endl;
-  std::cout << x + y << std::endl;
-  std::cout << y + x << std::endl;
-  std::cout << "=====" << std::endl;
-  std::cout << - x + y << std::endl;
-  std::cout << - y + x << std::endl;
-  std::cout << "=====" << std::endl;
-  std::cout << x - y << std::endl;
-  std::cout << y - x << std::endl;
-  std::cout << - x - y << std::endl;
-  std::cout << - y - x << std::endl;
-  std::cout << "=====" << std::endl;
-  std::cout << x * y << std::endl;
-  std::cout << y * x << std::endl;
-  std::cout << - x * y << std::endl;
-  std::cout << - y * x << std::endl;
-  std::cout << x * y + z << std::endl;
-  std::cout << y * x + z<< std::endl;
-  std::cout << - x * y + z<< std::endl;
-  std::cout << - y * x + z<< std::endl;
-  std::cout << x + z * y << std::endl;
-  std::cout << y + z * x << std::endl;
-  std::cout << - x + z * y << std::endl;
-  std::cout << - y + z * x << std::endl;
-  std::cout << "=====" << std::endl;
+  y1 = - x1 * x2 - x2 * x1;
+  y2 = - x1 * x2 - x2 * x1;
 
-  Symbol::Variable a("a");
-  Symbol::Variable b("b");
-  Symbol::Variable c("c");
+  std::cout << x1 << std::endl;
+  std::cout << x2 << std::endl;
+  std::cout << y1 << std::endl;
+  std::cout << y2.optimize() << std::endl;
 
-  std::cout << (x).differentiate(x) << std::endl;
-  std::cout << (x).differentiate(y) << std::endl;
-  std::cout << (x + y).differentiate(x) << std::endl;
-  std::cout << (x + y).differentiate(y) << std::endl;
-  std::cout << (x + y).differentiate(x + y) << std::endl;
-  std::cout << (y + x).differentiate(x + y) << std::endl; // Wrong!
-  std::cout << (x * y).differentiate(x) << std::endl;
-  std::cout << (x * y).differentiate(y) << std::endl;
+  std::cout << x1.differentiate(x1) << std::endl;
+  std::cout << x2.differentiate(x1) << std::endl;
+  std::cout << y1.differentiate(x1) << std::endl;
+  std::cout << y2.differentiate(x1) << std::endl;
+  std::cout << y1.differentiate(y2) << std::endl;
+  std::cout << (x1 + x2).differentiate(x1 + x2) << std::endl;
 
-  std::cout << (a * x + b * y + c * z).differentiate(x) << std::endl;
-  std::cout << (a * x + b * y + c * z).differentiate(y) << std::endl;
-  std::cout << (a * x + b * y + c * z).differentiate(z) << std::endl;
-
-
-  return 0;
 }
