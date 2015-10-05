@@ -67,19 +67,20 @@ namespace Symbol {
 // Prototype Declarations
 ////////////////////////////////////////////////////////////////////////////////
 enum class Symbol::Impl_::Predicate {
-  ZERO, ONE, CONST, VARIABLE, NEGATE, ADD, MULTIPLY, DIVIDE, LOG, POWER
+  CONST, VARIABLE, NEGATE, ADD, MULTIPLY, DIVIDE, LOG, POWER
 };
 
 class Symbol::Impl_::Expression {
   std::string name_;
-  Predicate predicate_;
-  Operands operands_;
-
+  Predicate   predicate_;
+  Operands    operands_;
+  int         val_;
   void assertExpressionConsistency(const std::string info) const;
 public:
-  // Construct operations with zero operand (= variable).
+  // Construct operations with zero operand. (= variable)
   Expression(const std::string name);
-  Expression(const Predicate& preditace);
+  // Construct operations with constant value. (= constant symbol)
+  Expression(const Predicate& preditace, const int val);
   // Construct operations with one operand.
   Expression(const std::string op, Operand operand);
   Expression(const Predicate& preditace, Operand operand);
@@ -139,35 +140,43 @@ Symbol::Impl_::Expression::Expression(const std::string name)
   : name_(name)
   , predicate_(Predicate::VARIABLE)
   , operands_()
+  , val_()
 {
   assertExpressionConsistency(GEN_DEBUG_INFO);
 }
 
-Symbol::Impl_::Expression::Expression(const Predicate& predicate)
+Symbol::Impl_::Expression::Expression(const Predicate& predicate, const int v)
   : name_()
   , predicate_(predicate)
   , operands_()
+  , val_(v)
 {
   assertExpressionConsistency(GEN_DEBUG_INFO);
 }
 
 Symbol::Impl_::Expression::Expression(const Predicate& pred, Operand operand)
-  : predicate_(pred)
+  : name_()
+  , predicate_(pred)
   , operands_({operand})
+  , val_()
 {
   assertExpressionConsistency(GEN_DEBUG_INFO);
 }
 
 Symbol::Impl_::Expression::Expression(const std::string pred, Operand operand)
-  : predicate_(str2pred(pred))
+  : name_()
+  , predicate_(str2pred(pred))
   , operands_({operand})
+  , val_()
 {
   assertExpressionConsistency(GEN_DEBUG_INFO);
 }
 
 Symbol::Impl_::Expression::Expression(const Predicate& pred, Operands operands)
-  : predicate_(pred)
+  : name_()
+  , predicate_(pred)
   , operands_(operands)
+  , val_()
 {
   assertExpressionConsistency(GEN_DEBUG_INFO);
 };
@@ -184,8 +193,6 @@ void Symbol::Impl_::Expression::assertExpressionConsistency(
   auto nOperands = operands_.size();
   auto nOpStr = std::to_string(nOperands);
   switch(predicate_) {
-  case Predicate::ONE:
-  case Predicate::ZERO:
   case Predicate::CONST:
   case Predicate::VARIABLE:
     if (nOperands)  {
@@ -258,15 +265,13 @@ Symbol::Impl_::pExpression Symbol::Impl_::log (const pExpression& pExp) {
 Symbol::Impl_::pExpression Symbol::Impl_::Expression::differentiate(
                                                   const pExpression& dx) const {
   if (string() == dx->string()) {
-    return std::make_shared<Expression>(Predicate::ONE);
+    return std::make_shared<Expression>(Predicate::CONST, 1);
   }
 
   switch(predicate_) {
-  case Predicate::ONE:
-  case Predicate::ZERO:
   case Predicate::CONST:
   case Predicate::VARIABLE:
-    return std::make_shared<Expression>(Predicate::ZERO);
+    return std::make_shared<Expression>(Predicate::CONST, 0);
   case Predicate::NEGATE:
     return -(operands_[0]->differentiate(dx));
   case Predicate::ADD:
@@ -308,11 +313,11 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::differentiate(
 }
 
 bool Symbol::Impl_::Expression::isOne() const {
-  return Predicate::ONE == predicate_;
+  return (Predicate::CONST == predicate_ && 1 == val_);
 }
 
 bool Symbol::Impl_::Expression::isZero() const {
-  return Predicate::ZERO == predicate_;
+  return (Predicate::CONST == predicate_ && 0 == val_);
 }
 
 Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
@@ -331,7 +336,7 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
     break;
   case Predicate::MULTIPLY:
     if (operands_[0]->isZero() || operands_[1]->isZero()) {
-      return std::make_shared<Expression>(Predicate::ZERO);
+      return std::make_shared<Expression>(Predicate::CONST, 0);
     }
     if (operands_[0]->isOne()) { return operands_[1]; }
     if (operands_[1]->isOne()) { return operands_[0]; }
@@ -344,7 +349,7 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
     break;
   case Predicate::DIVIDE:
     if (operands_[0]->isZero()) {
-      return std::make_shared<Expression>(Predicate::ZERO);
+      return std::make_shared<Expression>(Predicate::CONST, 0);
     }
     if (operands_[1]->isOne()) { return operands_[0]; }
     if (Predicate::NEGATE == operands_[0]->predicate_) {
@@ -372,8 +377,7 @@ const Symbol::Impl_::pExpression Symbol::Impl_::Expression::optimize() const {
 }
 
 std::string Symbol::Impl_::Expression::string() const {
-  if (Predicate::ONE == predicate_) { return "ONE"; }
-  if (Predicate::ZERO == predicate_) { return "ZERO"; }
+  if (Predicate::CONST == predicate_) { return std::to_string(val_); }
   if (Predicate::VARIABLE == predicate_) { return name_; }
 
   std::vector<std::string> strings;
@@ -454,10 +458,6 @@ std::ostream& Symbol::operator << (std::ostream& o, const Scalar& t) {
 
 std::string Symbol::pred2str(const Impl_::Predicate& p) {
   switch(p) {
-  case Impl_::Predicate::ZERO:
-    return "zero";
-  case Impl_::Predicate::ONE:
-    return "one";
   case Impl_::Predicate::CONST:
     return "const";
   case Impl_::Predicate::VARIABLE:
@@ -479,8 +479,6 @@ std::string Symbol::pred2str(const Impl_::Predicate& p) {
 }
 
 Symbol::Impl_::Predicate Symbol::str2pred(const std::string& s) {
-  if ("zero" == s) { return Impl_::Predicate::ZERO; }
-  if ("one" == s) { return  Impl_::Predicate::ONE; }
   if ("const" == s) { return Impl_::Predicate::CONST; }
   if ("variable" == s) { return Impl_::Predicate::VARIABLE; }
   if ("negate" == s) { return  Impl_::Predicate::NEGATE; }
