@@ -101,7 +101,7 @@ public:
   bool isOne() const;
   bool isZero() const;
   pExpression reduce() const;
-  const pExpression optimize() const;
+  pExpression optimize() const;
 
   /** Helper Functions */
   std::string string() const;
@@ -306,7 +306,6 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
     {
       // TODO: add variable merge
       bool allNegate = true;
-      bool hasConstExp = false;
       auto constOperand = std::make_shared<Expression>(0);
       Operands tmpOperands;
       for (auto& operand : operands_) {
@@ -322,11 +321,9 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
 	if (Predicate::CONST == operand->predicate_) {
 	  // Merge constant operands
 	  constOperand->val_ += operand->val_;
-	  hasConstExp = true;
 	} else if (Predicate::NEGATE == operand->predicate_ &&
 		   Predicate::CONST == operand->operands_[0]->predicate_) {
 	  constOperand->val_ -= operand->operands_[0]->val_;
-	  hasConstExp = true;
 	} else if (Predicate::ADD == operand->predicate_) {
 	  // Concatenate add operands
 	  tmpOperands.insert(tmpOperands.end(),
@@ -336,7 +333,7 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
 	  tmpOperands.push_back(operand);
 	}
       }
-      if (hasConstExp) {
+      if (!constOperand->isZero()) {
 	tmpOperands.push_back(constOperand);
       }
       // All operands were 0
@@ -349,11 +346,10 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
       }
       // Invert if all operands are negative
       if (allNegate) {
-	auto invert = [] (pExpression pExp) -> pExpression {
-	  return pExp->operands_[0];
-	};
 	std::transform(tmpOperands.begin(), tmpOperands.end(),
-		       tmpOperands.begin(), invert);
+		       tmpOperands.begin(), [] (pExpression pExp) {
+			 return pExp->operands_[0];
+		       });
       }
       return std::make_shared<Expression>(Predicate::ADD, tmpOperands);
     }
@@ -361,7 +357,6 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
     {
       // TODO: add variable merge
       bool negate = false;
-      bool hasConstExp = false;
       auto constOperand = std::make_shared<Expression>(1);
       Operands tmpOperands;
       for (auto& operand : operands_) {
@@ -383,12 +378,11 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
 	} else if (Predicate::CONST == operand->predicate_) {
 	  // Merge constant operands
 	  constOperand->val_ *= operand->val_;
-	  hasConstExp = true;
 	} else{
 	  tmpOperands.push_back(operand);
 	}
       }
-      if (hasConstExp) {
+      if (!constOperand->isOne()) {
 	tmpOperands.push_back(constOperand);
       }
       if (0 == tmpOperands.size()) {
@@ -433,17 +427,17 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::reduce() const {
   return std::make_shared<Expression>(*this);
 };
 
-const Symbol::Impl_::pExpression Symbol::Impl_::Expression::optimize() const {
-  auto pExp = std::make_shared<Expression>(*this);
+Symbol::Impl_::pExpression Symbol::Impl_::Expression::optimize() const {
+  auto pOpt = std::make_shared<Expression>(*this);
   std::string before;
   do {
-    before = pExp->string();
-    for (size_t i = 0; i < pExp->operands_.size(); ++i) {
-      pExp->operands_[i] = pExp->operands_[i]->optimize();
+    before = pOpt->string();
+    for (size_t i = 0; i < pOpt->operands_.size(); ++i) {
+      pOpt->operands_[i] = pOpt->operands_[i]->optimize();
     }
-    pExp = pExp->reduce();
-  } while (before != pExp->string());
-  return pExp;
+    pOpt = pOpt->reduce();
+  } while (before != pOpt->string());
+  return pOpt;
 }
 
 Symbol::Impl_::pExpression Symbol::Impl_::Expression::differentiate(
