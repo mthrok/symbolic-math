@@ -2,17 +2,17 @@
 
 void checkEq(Symbol::Scalar sym1, Symbol::Scalar sym2) {
   std::cout << "=====" << "\n"
-	    << "LHR:" << sym1 << "\n"
-	    << "RHR:" << sym2 << "\n";
+	    << "    LHR: " << sym1 << "\n"
+	    << "    RHR: " << sym2 << "\n\n";
   sym1 = sym1.simplify();
   sym2 = sym2.simplify();
-  std::cout << "  =>" << "\n"
-	    << "LHR: " << sym1 << "\n"
-	    << "RHR: " << sym2 << "\n";
+  std::cout << "     =>" << "\n\n"
+	    << "    LHR: " << sym1 << "\n"
+	    << "    RHR: " << sym2 << "\n\n";
   if (sym1 == sym2) {
-    std::cout << "  Equal.\n";
+    std::cout << "Equal.\n\n";
   } else {
-    std::cout << "  NOT Equal.\n\n";
+    std::cout << "NOT Equal.\n\n";
   }
 }
 

@@ -78,9 +78,9 @@ enum class Symbol::Impl_::Predicate {
 
 class Symbol::Impl_::Expression {
   std::string name_;
-  Predicate   predicate_;
-  Operands    operands_;
-  int         val_;
+  const Predicate   predicate_;
+  const Operands    operands_;
+  int val_;
   void assertExpressionConsistency(const std::string info) const;
 public:
   // Construct operations with zero operand. (= variable)
@@ -431,11 +431,17 @@ Symbol::Impl_::pExpression Symbol::Impl_::Expression::optimize() const {
   auto pOpt = std::make_shared<Expression>(*this);
   std::string before;
   do {
-    before = pOpt->string();
-    for (size_t i = 0; i < pOpt->operands_.size(); ++i) {
-      pOpt->operands_[i] = pOpt->operands_[i]->optimize();
+    if (Predicate::CONST == pOpt->predicate_ ||
+	Predicate::VARIABLE == pOpt->predicate_) {
+      return pOpt;
     }
-    pOpt = pOpt->reduce();
+
+    before = pOpt->string();
+    Operands operands;
+    for (auto& operand : pOpt->operands_) {
+      operands.push_back(operand->optimize());
+    }
+    pOpt = std::make_shared<Expression>(pOpt->predicate_, operands)->reduce();
   } while (before != pOpt->string());
   return pOpt;
 }
