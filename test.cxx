@@ -2,13 +2,13 @@
 
 void checkEq(Symbol::Scalar sym1, Symbol::Scalar sym2) {
   std::cout << "=====" << "\n"
-	    << "    LHR: " << sym1 << "\n"
-	    << "    RHR: " << sym2 << "\n\n";
+	    << "    LHS: " << sym1 << "\n"
+	    << "    RHS: " << sym2 << "\n\n";
   sym1 = sym1.simplify();
   sym2 = sym2.simplify();
   std::cout << "     =>" << "\n\n"
-	    << "    LHR: " << sym1 << "\n"
-	    << "    RHR: " << sym2 << "\n\n";
+	    << "    LHS: " << sym1 << "\n"
+	    << "    RHS: " << sym2 << "\n\n";
   if (sym1 == sym2) {
     std::cout << "Equal.\n\n";
   } else {
