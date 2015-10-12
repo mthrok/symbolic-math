@@ -34,11 +34,11 @@ namespace Symbol {
     typedef std::shared_ptr<Operation> pOperation;
   }
 
-  class Scalar;
-
   typedef std::shared_ptr<Impl_::Operation> Operand;
 
   typedef std::vector<Operand> Operands;
+
+  class Scalar;
 };
 
 /** Support functions */
@@ -73,16 +73,16 @@ namespace Symbol{
 		      const pOperation& pExp2);
 
     pOperation log (const pOperation& pExp);
+
+    std::ostream& operator << (std::ostream& o, const Operation& e);
   }
-
-  std::ostream& operator << (std::ostream& o, const Impl_::Operation& e);
-
-  std::ostream& operator << (std::ostream& o, const Scalar& t);
 
   /** Arithmeric operations */
   Scalar log(const Scalar& s);
-};
 
+  /** Helper functions */
+  std::ostream& operator << (std::ostream& o, const Scalar& t);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Prototype Declarations
@@ -95,14 +95,14 @@ class Symbol::Impl_::Operation {
   const std::string name_;
   const Predicate   predicate_;
   const Operands    operands_;
-  int val_;
+  double            constant_;
   void assertOperationConsistency(const std::string info) const;
 public:
   // Construct operations with zero operand. (= variable)
   Operation(const std::string name);
 
   // Construct operations with constant value. (= constant symbol)
-  Operation(const int val);
+  Operation(const double constant);
 
   // Construct operations with one operand.
   Operation(const std::string op, Operand operand);
@@ -124,11 +124,13 @@ public:
   pOperation optimize() const;
 
   /** Helper Functions */
-  operator int() const;
+  operator double() const;
 
   std::string name() const;
 
   friend std::string expressionName(const Predicate& p, const Operands& o);
+
+  friend pOperation operator - (const pOperation& pExp);
 
   friend std::ostream& operator << (std::ostream& o, const Operation& e);
 
@@ -143,8 +145,12 @@ class Symbol::Scalar {
   Scalar(std::shared_ptr<Impl_::Operation> pExp);
 
 public:
+  /** Constructors */
   Scalar(const std::string name);
-  Scalar(const int val);
+  Scalar(const double val);
+
+  /** Identifier */
+  std::string name() const;
 
   /** Arithmetic Operations */
   Scalar operator - () const;
@@ -160,9 +166,6 @@ public:
 
   /** Differentiation */
   Scalar differentiate (Scalar dx) const;
-
-  /** Optimization */
-  Scalar simplify() const;
 
   /** Helper functions */
   friend std::ostream& operator << (std::ostream& o, const Scalar& t);
@@ -205,7 +208,7 @@ Symbol::Impl_::Predicate Symbol::Impl_::str2pred(const std::string& s) {
 }
 
 std::string Symbol::Impl_::operationString(
-                         const Predicate& predicate, const Operands& operands) {
+    const Predicate& predicate, const Operands& operands) {
   std::vector<std::string> strings(operands.size());
   std::transform(operands.begin(), operands.end(), strings.begin(),
 		 [] (Operand operand) { return operand->name(); });
@@ -228,16 +231,16 @@ Symbol::Impl_::Operation::Operation(const std::string name)
   : name_(name)
   , predicate_(Predicate::VARIABLE)
   , operands_()
-  , val_()
+  , constant_()
 {
   assertOperationConsistency(GEN_DEBUG_INFO);
 }
 
-Symbol::Impl_::Operation::Operation(const int v)
+Symbol::Impl_::Operation::Operation(const double v)
   : name_("const")
   , predicate_(Predicate::CONST)
   , operands_()
-  , val_(v)
+  , constant_(v)
 {
   assertOperationConsistency(GEN_DEBUG_INFO);
 }
@@ -246,7 +249,7 @@ Symbol::Impl_::Operation::Operation(const Predicate& pred, Operand operand)
   : name_(Impl_::operationString(pred, {operand}))
   , predicate_(pred)
   , operands_({operand})
-  , val_()
+  , constant_()
 {
   assertOperationConsistency(GEN_DEBUG_INFO);
 }
@@ -255,7 +258,7 @@ Symbol::Impl_::Operation::Operation(const std::string pred, Operand operand)
   : name_(operationString(str2pred(pred), {operand}))
   , predicate_(str2pred(pred))
   , operands_({operand})
-  , val_()
+  , constant_()
 {
   assertOperationConsistency(GEN_DEBUG_INFO);
 }
@@ -264,7 +267,7 @@ Symbol::Impl_::Operation::Operation(const Predicate& pred, Operands operands)
   : name_(operationString(pred, operands))
   , predicate_(pred)
   , operands_(operands)
-  , val_()
+  , constant_()
 {
   assertOperationConsistency(GEN_DEBUG_INFO);
 };
@@ -273,13 +276,13 @@ Symbol::Impl_::Operation::Operation(const std::string pred, Operands operands)
   : name_(operationString(str2pred(pred), operands))
   , predicate_(str2pred(pred))
   , operands_(operands)
-  , val_()
+  , constant_()
 {
   assertOperationConsistency(GEN_DEBUG_INFO);
 };
 
 void Symbol::Impl_::Operation::assertOperationConsistency(
-						 const std::string info) const {
+    const std::string info) const {
   auto nOperands = operands_.size();
   auto nOpStr = std::to_string(nOperands);
   switch(predicate_) {
@@ -319,40 +322,43 @@ void Symbol::Impl_::Operation::assertOperationConsistency(
 
 std::string Symbol::Impl_::Operation::name() const {
   if (Predicate::CONST == predicate_) {
-    return std::to_string(val_);
+    return std::to_string(constant_);
   }
   return name_;
 };
 
-Symbol::Impl_::pOperation Symbol::Impl_::operator - (
-    const pOperation& pExp) {
-  return std::make_shared<Operation>("negate", pExp);
+Symbol::Impl_::pOperation Symbol::Impl_::operator - (const pOperation& pExp) {
+  if (Predicate::NEGATE == pExp->predicate_) {
+    return pExp->operands_[0];
+  } else {
+    return std::make_shared<Operation>("negate", pExp);
+  }
 }
 
-Symbol::Impl_::pOperation Symbol::Impl_::operator + (
-    const pOperation& pExp1, const pOperation& pExp2) {
-  return std::make_shared<Operation>("add", Operands {pExp1, pExp2});
+Symbol::Impl_::pOperation Symbol::Impl_::operator + (const pOperation& pExp1,
+						     const pOperation& pExp2) {
+  return std::make_shared<Operation>("add", Operands {pExp1, pExp2})->reduce();
 }
 
-Symbol::Impl_::pOperation Symbol::Impl_::operator - (
-    const pOperation& pExp1, const pOperation& pExp2) {
+Symbol::Impl_::pOperation Symbol::Impl_::operator - (const pOperation& pExp1,
+						     const pOperation& pExp2) {
   return std::make_shared<Operation>("add", Operands {pExp1, -pExp2});
 }
 
-Symbol::Impl_::pOperation Symbol::Impl_::operator * (
-    const pOperation& pExp1, const pOperation& pExp2) {
+Symbol::Impl_::pOperation Symbol::Impl_::operator * (const pOperation& pExp1,
+						     const pOperation& pExp2) {
   return std::make_shared<Operation>("multiply", Operands {pExp1, pExp2});
 }
 
-Symbol::Impl_::pOperation Symbol::Impl_::operator / (
-    const pOperation& pExp1, const pOperation& pExp2) {
+Symbol::Impl_::pOperation Symbol::Impl_::operator / (const pOperation& pExp1,
+						     const pOperation& pExp2) {
   auto exponent = std::make_shared<Operation>(-1);
   auto denominator = std::make_shared<Operation>("power", Operands {pExp2, exponent});
   return std::make_shared<Operation>("multiply", Operands {pExp1, denominator});
 }
 
-Symbol::Impl_::pOperation Symbol::Impl_::operator ^ (
-    const pOperation& pExp1, const pOperation& pExp2) {
+Symbol::Impl_::pOperation Symbol::Impl_::operator ^ (const pOperation& pExp1,
+						     const pOperation& pExp2) {
   return std::make_shared<Operation>("power", Operands {pExp1, pExp2});
 }
 
@@ -360,22 +366,24 @@ Symbol::Impl_::pOperation Symbol::Impl_::log (const pOperation& pExp) {
   return std::make_shared<Operation>("log", pExp);
 }
 
-bool Symbol::Impl_::operator == (
-    const pOperation& pExp1, const pOperation& pExp2) {
+bool Symbol::Impl_::operator == (const pOperation& pExp1,
+				 const pOperation& pExp2) {
   return pExp1->name() == pExp2->name();
 }
 
-bool Symbol::Impl_::operator != (
-    const pOperation& pExp1, const pOperation& pExp2) {
+bool Symbol::Impl_::operator != (const pOperation& pExp1,
+				 const pOperation& pExp2) {
   return !(pExp1 == pExp2);
 }
 
 bool Symbol::Impl_::Operation::isOne() const {
-  return (Predicate::CONST == predicate_ && 1 == val_);
+  // TODO change to Almost 1
+  return (Predicate::CONST == predicate_ && 1 == constant_);
 }
 
 bool Symbol::Impl_::Operation::isZero() const {
-  return (Predicate::CONST == predicate_ && 0 == val_);
+  // TODO change to Almost 0
+  return (Predicate::CONST == predicate_ && 0 == constant_);
 }
 
 Symbol::Impl_::pOperation Symbol::Impl_::Operation::reduce() const {
@@ -405,10 +413,10 @@ Symbol::Impl_::pOperation Symbol::Impl_::Operation::reduce() const {
 
 	if (Predicate::CONST == operand->predicate_) {
 	  // Merge constant operands
-	  constOperand->val_ += operand->val_;
+	  constOperand->constant_ += operand->constant_;
 	} else if (Predicate::NEGATE == operand->predicate_ &&
 		   Predicate::CONST == operand->operands_[0]->predicate_) {
-	  constOperand->val_ -= operand->operands_[0]->val_;
+	  constOperand->constant_ -= operand->operands_[0]->constant_;
 	} else if (Predicate::ADD == operand->predicate_) {
 	  // Concatenate add operands
 	  tmpOperands.insert(tmpOperands.end(),
@@ -472,7 +480,7 @@ Symbol::Impl_::pOperation Symbol::Impl_::Operation::reduce() const {
 	  negate = !negate;
 	} else if (Predicate::CONST == operand->predicate_) {
 	  // Merge constant operands
-	  constOperand->val_ *= operand->val_;
+	  constOperand->constant_ *= operand->constant_;
 	} else{
 	  tmpOperands.push_back(operand);
 	  ++variables[operand];
@@ -577,8 +585,8 @@ Symbol::Impl_::pOperation Symbol::Impl_::Operation::differentiate(
   throw std::runtime_error(what);
 }
 
-Symbol::Impl_::Operation::operator int() const {
-  return val_;
+Symbol::Impl_::Operation::operator double() const {
+  return constant_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -586,7 +594,7 @@ Symbol::Scalar::Scalar(const std::string name)
   : pExp_(std::make_shared<Impl_::Operation>(name))
 {}
 
-Symbol::Scalar::Scalar(const int val)
+Symbol::Scalar::Scalar(const double val)
   : pExp_(std::make_shared<Impl_::Operation>(val))
 {}
 
@@ -594,8 +602,10 @@ Symbol::Scalar::Scalar(std::shared_ptr<Impl_::Operation> pExp)
   : pExp_(pExp)
 {}
 
+std::string Symbol::Scalar::name() const { return this->pExp_->name(); }
+
 Symbol::Scalar Symbol::Scalar::operator - () const {
-  return Scalar(- this->pExp_);
+  return Scalar(-this->pExp_);
 };
 
 Symbol::Scalar Symbol::Scalar::operator + (const Scalar& other) const {
@@ -627,12 +637,8 @@ bool Symbol::Scalar::operator != (const Scalar& other) const {
 };
 
 Symbol::Scalar Symbol::Scalar::differentiate (Scalar dx) const {
-  auto pExp = this->simplify().pExp_->differentiate(dx.simplify().pExp_);
+  auto pExp = this->pExp_->differentiate(dx.pExp_);
   return Scalar(pExp->optimize());
-}
-
-Symbol::Scalar Symbol::Scalar::simplify() const {
-  return Scalar(pExp_->optimize());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -640,7 +646,7 @@ Symbol::Scalar Symbol::log(const Scalar& s) {
   return Symbol::Scalar(log(s.pExp_));
 }
 
-std::ostream& Symbol::operator <<(std::ostream& o, const Impl_::Operation& e) {
+std::ostream& Symbol::Impl_::operator <<(std::ostream& o, const Operation& e) {
   return o << e.name();
 }
 
