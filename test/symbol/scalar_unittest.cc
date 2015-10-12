@@ -38,6 +38,14 @@ TEST(Scalar, ConstantEquality) {
   EXPECT_NE(zero, std::to_string((double)1));
   EXPECT_NE(one,  std::to_string((double)2));
   EXPECT_NE(two,  std::to_string((double)0));
+
+  EXPECT_EQ(zero, zero);
+  EXPECT_EQ(one, one);
+  EXPECT_EQ(two, two);
+
+  EXPECT_NE(zero, one);
+  EXPECT_NE(one, two);
+  EXPECT_NE(two, zero);
 }
 
 TEST(Scalar, VariableEquality) {
@@ -66,16 +74,10 @@ TEST(Scalar, VariableNegation) {
   EXPECT_EQ(-x, y);
 }
 
-TEST(Scalar, ConstAddition) {
+TEST(Scalar, ConstantAddition) {
   Symbol::Scalar zero(0);
   Symbol::Scalar one(1);
   Symbol::Scalar two(2);
-
-  EXPECT_NE(zero, one);
-
-  EXPECT_NE(one, two);
-
-  EXPECT_NE(two, zero);
 
   EXPECT_EQ(one + one, two);
 
@@ -84,6 +86,16 @@ TEST(Scalar, ConstAddition) {
   EXPECT_EQ(one + one + zero, two + zero);
 }
 
-TEST(Scalar, AdditionVariable) {
+TEST(Scalar, VariableAddition) {
+  Symbol::Scalar x("x");
+  Symbol::Scalar y("y");
+  Symbol::Scalar z = x + y;
 
+  EXPECT_EQ(x + y, y + x);
+  EXPECT_EQ(z, y + x);
+  EXPECT_EQ(z, x + y);
+  EXPECT_EQ(z, z);
+
+  EXPECT_NE(x + y, z + x);
+  EXPECT_NE(z, x);
 }

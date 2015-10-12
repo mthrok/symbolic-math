@@ -197,13 +197,13 @@ std::string Symbol::Impl_::pred2str(const Predicate& p) {
 }
 
 Symbol::Impl_::Predicate Symbol::Impl_::str2pred(const std::string& s) {
-  if ("const" == s) { return Impl_::Predicate::CONST; }
-  if ("variable" == s) { return Impl_::Predicate::VARIABLE; }
-  if ("negate" == s) { return  Impl_::Predicate::NEGATE; }
-  if ("add" == s) { return Impl_::Predicate::ADD; }
-  if ("multiply" == s) { return Impl_::Predicate::MULTIPLY; }
-  if ("log" == s) { return Impl_::Predicate::LOG; }
-  if ("power" == s) { return Impl_::Predicate::POWER; }
+  if (s == "const")    { return Impl_::Predicate::CONST; }
+  if (s == "variable") { return Impl_::Predicate::VARIABLE; }
+  if (s == "negate")   { return Impl_::Predicate::NEGATE; }
+  if (s == "add")      { return Impl_::Predicate::ADD; }
+  if (s == "multiply") { return Impl_::Predicate::MULTIPLY; }
+  if (s == "log")      { return Impl_::Predicate::LOG; }
+  if (s == "power")    { return Impl_::Predicate::POWER; }
   throw std::runtime_error(GEN_DEBUG_INFO + "Not implemented:" + s);
 }
 
