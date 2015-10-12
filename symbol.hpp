@@ -1,3 +1,4 @@
+#include <map>
 #include <string>
 #include <vector>
 #include <memory>
@@ -49,7 +50,7 @@ namespace Symbol{
 
     Predicate str2pred(const std::string& s);
 
-    std::string expressionName(const Predicate& p, const Operands& o);
+    std::string operationString(const Predicate& p, const Operands& o);
 
     /** Arithmetic operations */
     pOperation operator - (const pOperation& pExp);
@@ -111,6 +112,8 @@ public:
   Operation(const std::string op, Operands operands);
   Operation(const Predicate& predicate, Operands operands);
 
+  // It might be clear to move differentiate, reduce, and optimize to standalone
+  // function.
   /** Differentiation */
   pOperation differentiate(const pOperation& dx) const;
 
@@ -201,7 +204,7 @@ Symbol::Impl_::Predicate Symbol::Impl_::str2pred(const std::string& s) {
   throw std::runtime_error(GEN_DEBUG_INFO + "Not implemented:" + s);
 }
 
-std::string Symbol::Impl_::expressionName(
+std::string Symbol::Impl_::operationString(
                          const Predicate& predicate, const Operands& operands) {
   std::vector<std::string> strings(operands.size());
   std::transform(operands.begin(), operands.end(), strings.begin(),
@@ -240,7 +243,7 @@ Symbol::Impl_::Operation::Operation(const int v)
 }
 
 Symbol::Impl_::Operation::Operation(const Predicate& pred, Operand operand)
-  : name_(Impl_::expressionName(pred, {operand}))
+  : name_(Impl_::operationString(pred, {operand}))
   , predicate_(pred)
   , operands_({operand})
   , val_()
@@ -249,7 +252,7 @@ Symbol::Impl_::Operation::Operation(const Predicate& pred, Operand operand)
 }
 
 Symbol::Impl_::Operation::Operation(const std::string pred, Operand operand)
-  : name_(expressionName(str2pred(pred), {operand}))
+  : name_(operationString(str2pred(pred), {operand}))
   , predicate_(str2pred(pred))
   , operands_({operand})
   , val_()
@@ -258,7 +261,7 @@ Symbol::Impl_::Operation::Operation(const std::string pred, Operand operand)
 }
 
 Symbol::Impl_::Operation::Operation(const Predicate& pred, Operands operands)
-  : name_(expressionName(pred, operands))
+  : name_(operationString(pred, operands))
   , predicate_(pred)
   , operands_(operands)
   , val_()
@@ -267,7 +270,7 @@ Symbol::Impl_::Operation::Operation(const Predicate& pred, Operands operands)
 };
 
 Symbol::Impl_::Operation::Operation(const std::string pred, Operands operands)
-  : name_(expressionName(str2pred(pred), operands))
+  : name_(operationString(str2pred(pred), operands))
   , predicate_(str2pred(pred))
   , operands_(operands)
   , val_()
@@ -436,14 +439,22 @@ Symbol::Impl_::pOperation Symbol::Impl_::Operation::reduce() const {
   case Predicate::MULTIPLY:
     {
       // TODO: add variable merge
+      struct comp_pOperation {
+	bool operator()(const pOperation& a, const pOperation& b) const {
+	  return a->name() < b->name();
+	}
+      };
+      std::map<pOperation, float, comp_pOperation> variables;
+
       bool negate = false;
       auto constOperand = std::make_shared<Operation>(1);
       Operands tmpOperands;
       for (auto& operand : operands_) {
+	// Zero
 	if (operand->isZero()) {
 	  return std::make_shared<Operation>(0);
 	}
-	// Remove Ones
+	// Ignore Ones
 	if (operand->isOne()) {
 	  continue;
 	}
@@ -451,17 +462,27 @@ Symbol::Impl_::pOperation Symbol::Impl_::Operation::reduce() const {
 	  // Concatenate MULTIPLY operands
 	  tmpOperands.insert(tmpOperands.end(),
 			     operand->operands_.begin(), operand->operands_.end());
+	  for (auto& operand2 : operand->operands_) {
+	    ++variables[operand2];
+	  }
 	} else if (Predicate::NEGATE == operand->predicate_) {
 	  // Merge negation
 	  tmpOperands.push_back(operand->operands_[0]);
+	  ++variables[operand->operands_[0]];
 	  negate = !negate;
 	} else if (Predicate::CONST == operand->predicate_) {
 	  // Merge constant operands
 	  constOperand->val_ *= operand->val_;
 	} else{
 	  tmpOperands.push_back(operand);
+	  ++variables[operand];
 	}
       }
+      std::cout << "DEBUG: " << name() << std::endl;
+      for (auto& var: variables) {
+	std::cout << "    " << var.first->name() << " : " << var.second << std::endl;
+      }
+
       if (!constOperand->isOne()) {
 	tmpOperands.push_back(constOperand);
       }
