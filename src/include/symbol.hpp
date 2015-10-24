@@ -2,666 +2,865 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <sstream>
+#include <iomanip>
 #include <iostream>
+#include <algorithm>
+#include <functional>
+
 #include "easylogging++.h"
 
 ////////////////////////////////////////////////////////////////////////////////
-// Forward Declarations
+#include <cmath>
+inline bool isNearlyEqual(double x, double y, const double epsilon = 1e-5) {
+  return std::abs(x - y) <= epsilon * std::abs(x);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-/** Main classes */
+// Data structure
 namespace Symbol {
-
   namespace Impl_ {
+    enum class Operator;
 
-    enum class Predicate;
+    class Exp;
+  };
 
-    class Operation;
-
-    typedef std::shared_ptr<Operation> pOperation;
-
-    typedef std::shared_ptr<Operation> Operand;
-
-    typedef std::vector<Operand> Operands;
-  }
-
-  typedef std::shared_ptr<Impl_::Operation> pExpression;
-
-  class Scalar;
+  class Expression;
 };
 
-/** Support functions */
-namespace Symbol{
+#define MAKE_SHARED_EXP std::make_shared<Impl_::Exp>
+typedef std::shared_ptr<Symbol::Impl_::Exp> Operand;
+typedef std::shared_ptr<Symbol::Impl_::Exp> pExpression;
+typedef std::vector<Operand> Operands;
 
-  namespace Impl_{
+////////////////////////////////////////////////////////////////////////////////
+// Operations
+namespace Symbol {
+  namespace Impl_ {
+    pExpression constructCONST(const double c);
+    pExpression constructVARIABLE(const std::string name);
+    pExpression constructADD(const Operands ops);
+    pExpression constructNEGATE(const Operand o);
+    pExpression constructMULTIPLY(const Operands ops);
+    pExpression constructPOWER(const Operands ops);
 
-    /** Support functions for facilitating Operation construction */
-    std::string pred2str(const Predicate& p);
+    pExpression flatten(const pExpression &pExp);
+    pExpression merge(const pExpression &pExp);
+    pExpression sort(const pExpression &pExp,
+                     bool(*cmpr)(const pExpression&, const pExpression&)=NULL);
+    pExpression expand(const pExpression &pExp);
+    pExpression factor(const pExpression &pExp);
 
-    Predicate str2pred(const std::string& s);
+    double getCoeff(const pExpression &pExp);
+    pExpression getNonCoeff(const pExpression &pExp);
 
-    std::string genStringExpression(const Predicate& p, const Operands& o);
+    pExpression getBase(const pExpression &pExp);
+    pExpression getPower(const pExpression &pExp);
 
-    pOperation makeOperation(const std::string pred, const Operands opreands);
+    pExpression simplify(const pExpression &pExp);
 
-    pOperation makeOperation(const Predicate pred, const Operands opreands);
+    pExpression operator - (const Operand o);
+    pExpression operator + (const Operand o1, const Operand o2);
+    pExpression operator + (const Operand o, const double c);
+    pExpression operator - (const Operand o1, const Operand o2);
+    pExpression operator * (const Operand o1, const Operand o2);
+    pExpression operator * (const Operand o, const double c);
+    pExpression operator ^ (const Operand o1, const Operand o2);
+    pExpression operator ^ (const Operand o, const double c);
+    pExpression operator ^ (const double c, const Operand o);
+  };
 
-    pOperation makeOperation(const double constant);
+  bool operator == (const Expression &e1, const Expression &e2);
+  bool operator == (const Expression &e, const std::string strExp);
+  bool operator == (const std::string strExp, const Expression &e);
+  bool operator != (const Expression &e1, const Expression &e2);
+  bool operator != (const Expression &e, const std::string strExp);
+  bool operator != (const std::string strExp, const Expression &e);
+  Expression operator - (const Expression &e);
+  Expression operator + (const Expression &e, const double c);
+  Expression operator + (const double c, const Expression &e);
+  Expression operator + (const Expression &e1, const Expression &e2);
+  Expression operator - (const Expression &e, const double c);
+  Expression operator - (const double c, const Expression &e);
+  Expression operator - (const Expression &e1, const Expression &e2);
+  Expression operator * (const Expression &e1, const Expression &e2);
+  Expression operator * (const Expression &e, const double c);
+  Expression operator * (const double c, const Expression &e);
+  Expression operator ^ (const Expression &e1, const Expression &e2);
+  Expression operator ^ (const Expression &e, const double c);
+  Expression operator ^ (const double c, const Expression &e);
 
-    pOperation makeOperation(const std::string name);
-
-    /** Equality */
-    bool operator == (const pOperation& pOp1, const pOperation& pOp2);
-
-    bool operator != (const pOperation& pOp1, const pOperation& pOp2);
-
-    /** Arithmetic operations */
-    pOperation operator - (const pOperation& pOp);
-    pOperation operator + (const pOperation& pOp1, const pOperation& pOp2);
-    pOperation operator - (const pOperation& pOp1, const pOperation& pOp2);
-    pOperation operator * (const pOperation& pOp1, const pOperation& pOp2);
-    pOperation operator / (const pOperation& pOp1, const pOperation& pOp2);
-    pOperation operator ^ (const pOperation& pOp1, const pOperation& pOp2);
-
-    pOperation log (const pOperation& pOp);
-
-    /** Optimizations */
-    pOperation reduce(const pOperation& pOp);
-
-    pOperation simplify(const pOperation& pOp);
-
-    pOperation differentiate(const pOperation& dy, const pOperation& dx);
-
-    /** Misc */
-    std::ostream& operator << (std::ostream& o, const Operation& e);
-  }
-
-  /** Arithmeric operations */
-  Scalar log(const Scalar& s);
-
-  /** Optimization */
-  Scalar differentiate (const Scalar& dy, const Scalar& dx);
-
-  /** Misc */
-  std::ostream& operator << (std::ostream& o, const Scalar& t);
+  std::ostream& operator << (std::ostream& o, const Expression &e);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// Prototype Declarations
-////////////////////////////////////////////////////////////////////////////////
-enum class Symbol::Impl_::Predicate {
-  CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
+enum class Symbol::Impl_::Operator {
+  CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER
 };
 
-class Symbol::Impl_::Operation {
-  const std::string name_;
-  const Predicate   predicate_;
-  const Operands    operands_;
-  double            constant_;
-
-  bool assertOperationConsistency() const;
+class Symbol::Impl_::Exp {
+  std::string name_;
+  double value_;
+  Operator operator_;
+  Operands operands_;
 
 public:
-  // Construct operations with zero operand. (= variable)
-  Operation(const std::string name);
+  Exp(std::string name = "const",
+      Operator oprtr = Operator::CONST,
+      Operands oprnds = {},
+      double val = 0);
 
-  // Construct operations with constant value. (= constant symbol)
-  Operation(const double constant);
-
-  // Construct operations with one operand.
-  Operation(const std::string op, Operand operand);
-  Operation(const Predicate& preditace, Operand operand);
-
-  // Construct operations with more that one operand.
-  Operation(const std::string op, Operands operands);
-  Operation(const Predicate& predicate, Operands operands);
-
-  /** Generate the unique name of this opearation. */
-  std::string name() const;
-
-  /** Array-like access to operands */
-  pOperation operator[] (const size_t index) const;
-
-  /** For optimization */
-  bool isOne() const;
+  void assertOperationConsistency() const;
+  bool isConst() const;
   bool isZero() const;
+  bool isOne() const;
 
-  /** Support functions for arithmetic operations */
-  friend pOperation operator - (const pOperation& pOp);
+  std::string id() const;
 
-  /** Support functions for optimzations */
-  friend pOperation reduce(const pOperation& pOp);
+  friend Expression;
 
-  friend pOperation simplify(const pOperation& pOp);
+  friend pExpression flatten(const pExpression &pExp);
+  friend pExpression merge(const pExpression &pExp);
+  friend pExpression sort(const pExpression &pExp,
+			  bool(*compare)(const pExpression&, const pExpression&));
 
-  friend pOperation differentiate(const pOperation& dy, const pOperation& dx);
+  friend pExpression simplify(const pExpression &pExp);
 
-  /** Misc support functions */
-  friend std::ostream& operator << (std::ostream& o, const Operation& e);
+  friend pExpression expand(const pExpression &pExp);
+  friend pExpression factor(const pExpression &pExp);
 
-  friend std::ostream& operator << (std::ostream& o, Operation e);
+  friend double getCoeff(const pExpression &pExp);
+  friend pExpression getNonCoeff(const pExpression &pExp);
+
+  friend pExpression getBase(const pExpression &pExp);
+  friend pExpression getExponent(const pExpression &pExp);
+
+  friend pExpression Impl_::operator - (const Operand o1, const Operand o2);
+  friend pExpression Impl_::operator + (const Operand o1, const Operand o2);
+  friend pExpression Impl_::operator + (const Operand e, const double c);
+  friend pExpression Impl_::operator * (const Operand o1, const Operand o2);
+  friend pExpression Impl_::operator * (const Operand e, const double c);
+  friend pExpression Impl_::operator ^ (const Operand o1, const Operand o2);
+  friend pExpression Impl_::operator ^ (const Operand e, const double c);
 };
 
-////////////////////////////////////////////////////////////////////////////////
-class Symbol::Scalar {
-
+class Symbol::Expression {
   pExpression pExp_;
-
-  Scalar(pExpression pExp);
+  Expression(pExpression pExp);
 
 public:
-  /** Constructors */
-  Scalar(const std::string name);
-  Scalar(const double constant);
+  Expression(double constant);
+  Expression(std::string name);
 
-  /** Identifier */
-  std::string name() const;
+  Expression expand() const;
+  Expression factor() const;
 
-  /** Arithmetic Operations */
-  Scalar operator - () const;
-  Scalar operator + (const Scalar& other) const;
-  Scalar operator - (const Scalar& other) const;
-  Scalar operator * (const Scalar& other) const;
-  Scalar operator / (const Scalar& other) const;
-  Scalar operator ^ (const Scalar& other) const;
+  friend bool operator == (const Expression &e1, const Expression &e2);
+  friend bool operator == (const Expression &e, const std::string strExp);
+  friend bool operator == (const std::string strExp, const Expression &e);
+  friend bool operator != (const Expression &e1, const Expression &e2);
+  friend bool operator != (const Expression &e, const std::string strExp);
+  friend bool operator != (const std::string strExp, const Expression &e);
 
-  /** Equality Check */
-  bool operator == (const Scalar& other) const;
-  bool operator != (const Scalar& other) const;
+  friend Expression operator - (const Expression &e);
 
-  /** Differentiation */
-  friend Scalar differentiate (const Scalar& dy, const Scalar& dx);
+  friend Expression operator + (const Expression &e, const double c);
+  friend Expression operator + (const double c, const Expression &e);
+  friend Expression operator + (const Expression &e1, const Expression &e2);
 
-  /** Helper functions */
-  friend std::ostream& operator << (std::ostream& o, const Scalar& t);
+  friend Expression operator - (const Expression &e, const double c);
+  friend Expression operator - (const double c, const Expression &e);
+  friend Expression operator - (const Expression &e1, const Expression &e2);
 
-  friend Symbol::Scalar log(const Symbol::Scalar& s);
+  friend Expression operator * (const Expression &e, const double c);
+  friend Expression operator * (const double c, const Expression &e);
+  friend Expression operator * (const Expression &e1, const Expression &e2);
+
+  friend Expression operator ^ (const Expression &e, const double c);
+  friend Expression operator ^ (const double c, const Expression &e);
+  friend Expression operator ^ (const Expression &e1, const Expression &e2);
+
+  friend std::ostream& operator << (std::ostream& o, const Expression &e);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// Implemantations
+// Default values
+namespace {
+  struct defaultCompare {
+    inline bool operator() (const pExpression& e1, const pExpression& e2) const {
+      if (e1->isConst() && !e2->isConst()) {
+        return true;
+      } else if (!e1->isConst() && e2->isConst()) {
+        return false;
+      } else {
+        auto id1 = e1->id(), id2 = e2->id();
+        return std::lexicographical_compare(id1.begin(), id1.end(),
+                                            id2.begin(), id2.end());
+      }
+    }
+  };
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-std::string Symbol::Impl_::pred2str(const Predicate& p) {
-  switch(p) {
-  case Impl_::Predicate::CONST:
-    return "const";
-  case Impl_::Predicate::VARIABLE:
-    return "variable";
-  case Impl_::Predicate::NEGATE:
-    return "negate";
-  case Impl_::Predicate::ADD:
-    return "add";
-  case Impl_::Predicate::MULTIPLY:
-    return "multiply";
-  case Impl_::Predicate::LOG:
-    return "log";
-  case Impl_::Predicate::POWER:
-    return "power";
+Symbol::Impl_::Exp::Exp(std::string name,
+		Operator oprtr,
+		Operands oprnds,
+                double value)
+  : name_(name)
+  , value_(value)
+  , operator_(oprtr)
+  , operands_(oprnds)
+{
+  assertOperationConsistency();
+}
+
+void Symbol::Impl_::Exp::assertOperationConsistency() const {
+  auto nOperands = operands_.size();
+  switch(operator_) {
+  case Operator::CONST:
+   if (nOperands) {
+     LOG(FATAL) << "CONST Expression must not have operand.";
+   }
+   break;
+  case Operator::VARIABLE:
+   if (nOperands) {
+     LOG(FATAL) << "VARIABLE Expression must not have operand.";
+   }
+   break;
+  case Operator::NEGATE:
+    if (nOperands != 1) {
+      LOG(FATAL) << "NEGATE Expression must have only one operand.";
+    }
+    break;
+  case Operator::POWER:
+    if (nOperands != 2) {
+      LOG(FATAL) << "POWER Expression must have two operands.";
+    }
+    break;
+  case Operator::ADD:
+    if (nOperands < 2) {
+      LOG(FATAL) << "ADD Expression must have at least two operands.";
+    }
+    break;
+  case Operator::MULTIPLY:
+    if (nOperands < 2) {
+      LOG(FATAL) << "MULTIPLY Expression must have at least two operands.";
+    }
+    break;
+  }
+};
+
+bool Symbol::Impl_::Exp::isConst() const {
+  return Operator::CONST == operator_;
+}
+
+bool Symbol::Impl_::Exp::isZero() const {
+  return isConst() && isNearlyEqual(value_, 0.0);
+}
+
+bool Symbol::Impl_::Exp::isOne() const {
+  return isConst() && isNearlyEqual(value_, 1.0);
+}
+
+pExpression Symbol::Impl_::constructCONST(const double c) {
+  return MAKE_SHARED_EXP("const", Operator::CONST, Operands {}, c);
+}
+
+pExpression Symbol::Impl_::constructVARIABLE(const std::string name) {
+  return MAKE_SHARED_EXP(name, Operator::VARIABLE);
+}
+
+pExpression Symbol::Impl_::constructNEGATE(const Operand v) {
+  return MAKE_SHARED_EXP("negate", Operator::NEGATE, Operands {v});
+}
+
+pExpression Symbol::Impl_::constructADD(const Operands ops) {
+  switch(ops.size()) {
+  case 0:
+    return constructCONST(0);
+  case 1:
+    return ops[0];
   default:
-    LOG(FATAL) << "Not implemented.";
+    return MAKE_SHARED_EXP("add", Operator::ADD, ops);
   }
 }
 
-Symbol::Impl_::Predicate Symbol::Impl_::str2pred(const std::string& s) {
-  if (s == "const")    { return Impl_::Predicate::CONST; }
-  if (s == "variable") { return Impl_::Predicate::VARIABLE; }
-  if (s == "negate")   { return Impl_::Predicate::NEGATE; }
-  if (s == "add")      { return Impl_::Predicate::ADD; }
-  if (s == "multiply") { return Impl_::Predicate::MULTIPLY; }
-  if (s == "log")      { return Impl_::Predicate::LOG; }
-  if (s == "power")    { return Impl_::Predicate::POWER; }
-  LOG(FATAL) << "Not implemented:" + s;
+pExpression Symbol::Impl_::constructMULTIPLY(const Operands ops) {
+  switch(ops.size()) {
+  case 0:
+    return constructCONST(1);
+  case 1:
+    return ops[0];
+  default:
+    return MAKE_SHARED_EXP("multipy", Operator::MULTIPLY, ops);
+  }
 }
 
-std::string Symbol::Impl_::genStringExpression(
-    const Predicate& predicate, const Operands& operands) {
-  std::vector<std::string> strings(operands.size());
-  std::transform(operands.begin(), operands.end(), strings.begin(),
-		 [] (Operand operand) { return operand->name(); });
+pExpression Symbol::Impl_::constructPOWER(const Operands ops) {
+  return MAKE_SHARED_EXP("power", Operator::POWER, ops);
+}
 
-  if (Predicate::ADD == predicate || Predicate::MULTIPLY == predicate) {
-    std::sort(strings.begin(), strings.end());
+pExpression Symbol::Impl_::flatten(const pExpression& pExp) {
+  // Flatten the child operands of this expression.
+  pExpression ret = pExp;
+  std::transform(ret->operands_.begin(), ret->operands_.end(),
+		 ret->operands_.begin(), Impl_::flatten);
+  // Flatten this expression.
+  switch(ret->operator_) {
+  case Operator::NEGATE:
+    switch (ret->operands_[0]->operator_) {
+    case Operator::NEGATE:  // Remove double negation.
+      return ret->operands_[0]->operands_[0];
+    case Operator::CONST:   // Put negation into constant
+      return constructCONST(-ret->operands_[0]->value_);
+    default:
+      return ret;
+    }
+  case Operator::ADD:
+  case Operator::MULTIPLY:
+    {  // Unnest the operands of the same operation type.
+      Operands newOperands;
+      for (auto& operand_ : ret->operands_) {
+	if (operand_->operator_ == ret->operator_) {
+	  newOperands.insert(newOperands.end(),
+			     operand_->operands_.begin(),
+			     operand_->operands_.end());
+	} else {
+	  newOperands.push_back(operand_);
+	}
+      }
+      return MAKE_SHARED_EXP(ret->name_, ret->operator_, newOperands);
+    }
+  default:
+    return ret;
   }
+}
 
-  std::string ret = pred2str(predicate);
-  ret += "(";
-  for (size_t i = 0; i < strings.size(); ++i) {
-    ret += strings[i];
-    if (i != strings.size() - 1) { ret += ", "; }
+pExpression Symbol::Impl_::merge(const pExpression& pExp) {
+  // Merge the child operands of this expression.
+  pExpression ret = pExp;
+  std::transform(ret->operands_.begin(), ret->operands_.end(),
+		 ret->operands_.begin(), Impl_::merge);
+  // Merge this expression.
+  switch(ret->operator_) {
+  case Operator::ADD: {
+    // Merge constant terms and
+    // non-constant terms consisting of the same variables
+    auto constOperand = constructCONST(0);
+    std::map<pExpression, double, defaultCompare> variables;
+    for (auto& operand_ : ret->operands_) {
+      if (operand_->isConst()) {
+	constOperand->value_ += operand_->value_;
+      } else {
+        variables[getNonCoeff(operand_)] += getCoeff(operand_);
+      }
+    }
+    // Reconstruct operands
+    Operands operands;
+    if (!isNearlyEqual(constOperand->value_, 0.0)) {
+      operands.push_back(constOperand);
+    }
+    for (auto& entry : variables) {
+      if (isNearlyEqual(entry.second, 0.0)) {
+        continue;
+      }
+      if (isNearlyEqual(entry.second, 1.0)) {
+        operands.push_back(entry.first);
+      } else if (isNearlyEqual(entry.second, -1.0)) {
+        operands.push_back(constructNEGATE(entry.first));
+      } else {
+        operands.push_back(
+          constructMULTIPLY({constructCONST(entry.second), entry.first}));
+      }
+    }
+    // Reconstruct Expression.
+    return constructADD(operands);
   }
-  ret += ")";
+  case Operator::MULTIPLY: {
+    // Merge constant terms and
+    // non-constant terms consisting of the same variables TODO
+    auto constOperand = constructCONST(1);
+    std::map<pExpression, pExpression, defaultCompare> variables;
+    // Operands operands;
+    for (auto& operand_ : ret->operands_) {
+      switch (operand_->operator_) {
+      case Operator::CONST:
+        constOperand->value_ *= operand_->value_;
+        break;
+      case Operator::NEGATE: {
+        constOperand->value_ *= -1;
+        auto base = getBase(operand_->operands_[0]);
+        auto exp = getExponent(operand_->operands_[0]);
+        if (variables.count(base)) {
+          variables[base] = variables[base] + exp;
+        } else {
+          variables[base] = exp;
+        }
+        break;
+      }
+      default: {
+        auto base = getBase(operand_);
+        auto exp = getExponent(operand_);
+        if (variables.count(base)) {
+          variables[base] = variables[base] + exp;
+        } else {
+          variables[base] = exp;
+        }
+      }
+      }
+    }
+    if (isNearlyEqual(constOperand->value_, 0,0)) {
+      return constructCONST(0);
+    }
+    // Reconstruct Expression.
+    Operands operands;
+    // Push back the constant term
+    bool isConstNegative = std::signbit(constOperand->value_);
+    constOperand->value_ = std::abs(constOperand->value_);
+    if (!isNearlyEqual(constOperand->value_, 1.0)) {
+      operands.push_back(constOperand);
+    }
+    // Push back the other term
+    for (auto& entry : variables) {
+      if (entry.second->isOne()) {
+        operands.push_back(entry.first);
+      } else {
+        operands.push_back(constructPOWER({entry.first, entry.second}));
+      }
+    }
+    switch(operands.size()) {
+    case 0:
+      if (isConstNegative) {
+        return constructCONST(-1);
+      } else {
+        return constructCONST(1);
+      }
+    case 1:
+      if (isConstNegative) {
+        return constructNEGATE(operands[0]);
+      }
+      return operands[0];
+    default:
+      ret = constructMULTIPLY(operands);
+      if (isConstNegative) {
+        ret = constructNEGATE(ret);
+      }
+      return ret;
+    }
+  }
+  case Operator::POWER: {
+    auto base = ret->operands_[0];
+    auto exp = ret->operands_[1];
+    if (exp->isZero()) {
+      return constructCONST(1);
+    }
+    if (exp->isOne()) {
+      return base;
+    }
+    if (Operator::CONST == base->operator_ &&
+        Operator::CONST == base->operator_) {
+      return constructCONST(std::pow(base->value_, exp->value_));
+    }
+    return ret;
+  }
+  default:
+    return ret;
+  }
+}
+
+pExpression Symbol::Impl_::sort(const pExpression&pExp,
+			bool(*cmpr)(const pExpression&, const pExpression&)) {
+  // Sort the child operands of this expression.
+  pExpression ret = pExp;
+  using namespace std::placeholders;
+  std::transform(ret->operands_.begin(), ret->operands_.end(),
+		 ret->operands_.begin(), std::bind(Impl_::sort, _1, cmpr));
+  // Sort this expression
+  if (Operator::POWER == pExp->operator_) {
+    return ret;
+  }
+  if (!cmpr) {
+    std::sort(ret->operands_.begin(), ret->operands_.end(), defaultCompare());
+  } else {
+    std::sort(ret->operands_.begin(), ret->operands_.end(), cmpr);
+  }
   return ret;
 }
 
-Symbol::Impl_::pOperation Symbol::Impl_::makeOperation(const Predicate pred,
-						       const Operands operands) {
-  return simplify(std::make_shared<Operation>(pred, operands));
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::makeOperation(const std::string pred,
-						       const Operands operands) {
-  return makeOperation(str2pred(pred), operands);
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::makeOperation(const double constant) {
-  return simplify(std::make_shared<Operation>(constant));
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::makeOperation(const std::string name) {
-  return simplify(std::make_shared<Operation>(name));
-}
-
-Symbol::Impl_::Operation::Operation(const std::string name)
-  : name_(name)
-  , predicate_(Predicate::VARIABLE)
-  , operands_()
-  , constant_()
-{
-  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
-}
-
-Symbol::Impl_::Operation::Operation(const double v)
-  : name_("const")
-  , predicate_(Predicate::CONST)
-  , operands_()
-  , constant_(v)
-{
-  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
-}
-
-Symbol::Impl_::Operation::Operation(const Predicate& pred, Operand operand)
-  : name_(Impl_::genStringExpression(pred, {operand}))
-  , predicate_(pred)
-  , operands_({operand})
-  , constant_()
-{
-  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
-}
-
-Symbol::Impl_::Operation::Operation(const std::string pred, Operand operand)
-  : name_(genStringExpression(str2pred(pred), {operand}))
-  , predicate_(str2pred(pred))
-  , operands_({operand})
-  , constant_()
-{
-  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
-}
-
-Symbol::Impl_::Operation::Operation(const Predicate& pred, Operands operands)
-  : name_(genStringExpression(pred, operands))
-  , predicate_(pred)
-  , operands_(operands)
-  , constant_()
-{
-  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
-};
-
-Symbol::Impl_::Operation::Operation(const std::string pred, Operands operands)
-  : name_(genStringExpression(str2pred(pred), operands))
-  , predicate_(str2pred(pred))
-  , operands_(operands)
-  , constant_()
-{
-  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
-};
-
-bool Symbol::Impl_::Operation::assertOperationConsistency() const {
-  auto nOperands = operands_.size();
-  switch(predicate_) {
-  case Predicate::CONST:
-  case Predicate::VARIABLE:
-    if (nOperands)
-      return false;
-    return true;
-  case Predicate::LOG:
-  case Predicate::NEGATE:
-    if (1 != nOperands)
-      return false;
-    return true;
-  case Predicate::POWER:
-    if (2 != nOperands)
-      return false;
-    return true;
-  case Predicate::ADD:
-  case Predicate::MULTIPLY:
-    if (2 > nOperands)
-      return false;
-    return true;
-  }
-};
-
-std::string Symbol::Impl_::Operation::name() const {
-  if (Predicate::CONST == predicate_) {
-    return std::to_string(constant_);
-  }
-  return name_;
-};
-
-Symbol::Impl_::pOperation Symbol::Impl_::Operation::operator[]
-    (const size_t index) const {
-  return operands_[index];
-};
-
-bool Symbol::Impl_::operator == (const pOperation& pOp1,
-				 const pOperation& pOp2) {
-  return pOp1->name() == pOp2->name();
-}
-
-bool Symbol::Impl_::operator != (const pOperation& pOp1,
-				 const pOperation& pOp2) {
-  return !(pOp1 == pOp2);
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::operator - (const pOperation& pOp) {
-  if (Predicate::NEGATE == pOp->predicate_) {
-    return (*pOp)[0];
-  }
-  return makeOperation("negate", Operands {pOp});
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::operator + (const pOperation& pOp1,
-						     const pOperation& pOp2) {
-  return makeOperation("add", Operands {pOp1, pOp2});
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::operator - (const pOperation& pOp1,
-						     const pOperation& pOp2) {
-  return makeOperation("add", Operands {pOp1, -pOp2});
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::operator * (const pOperation& pOp1,
-						     const pOperation& pOp2) {
-  return makeOperation("multiply", Operands {pOp1, pOp2});
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::operator / (const pOperation& pOp1,
-						     const pOperation& pOp2) {
-  auto exponent = makeOperation(-1);
-  auto denominator = makeOperation("power", Operands {pOp2, exponent});
-  return makeOperation("multiply", Operands {pOp1, denominator});
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::operator ^ (const pOperation& pOp1,
-						     const pOperation& pOp2) {
-  return makeOperation("power", Operands {pOp1, pOp2});
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::log (const pOperation& pOp) {
-  return makeOperation("log", Operands {pOp});
-}
-
-std::ostream& Symbol::Impl_::operator <<(std::ostream& o, const Operation& e) {
-  return o << e.name();
-}
-
-bool Symbol::Impl_::Operation::isOne() const {
-  // TODO change to Almost 1
-  return (Predicate::CONST == predicate_ && 1 == constant_);
-}
-
-bool Symbol::Impl_::Operation::isZero() const {
-  // TODO change to Almost 0
-  return (Predicate::CONST == predicate_ && 0 == constant_);
-}
-
-Symbol::Impl_::pOperation Symbol::Impl_::reduce(const pOperation& pOp) {
-  switch (pOp->predicate_) {
-  case Predicate::NEGATE:
-    {
-      auto innerOperand = (*pOp)[0];
-      if (innerOperand -> isZero()){
-	return std::make_shared<Operation>(0);
+// -(X + Y + Z) -> -X -Y -Z
+// (X + Y) * (A + B)  -> X*A + X*B + Y*A + Y*B
+// (X * Y) ^ A -> (X ^ A) * (Y ^ A)
+pExpression Symbol::Impl_::expand(const pExpression& pExp) {
+  // Expand each operand of this expression
+  pExpression ret = pExp;
+  std::transform(ret->operands_.begin(), ret->operands_.end(),
+		 ret->operands_.begin(), Impl_::expand);
+  // Expand this expression
+  switch(ret->operator_) {
+  case Operator::NEGATE: {
+    Operand innerOperand = ret->operands_[0];
+    switch(innerOperand->operator_) {
+    case Operator::ADD:
+      {
+        Operands newOperands;
+        for (auto& operand_ : innerOperand->operands_) {
+          newOperands.push_back(constructNEGATE(operand_));
+        }
+        return  MAKE_SHARED_EXP(innerOperand->name_, innerOperand->operator_,
+                                newOperands, innerOperand->value_);
       }
-      if (Predicate::NEGATE == innerOperand->predicate_)
-	return (*innerOperand)[0];
-      break;
+    default:
+      return ret;
     }
-  case Predicate::ADD:
-    {
-      // TODO: add variable merge
-      bool allNegate = true;
-      auto constOperand = std::make_shared<Operation>(0);
-      Operands tmpOperands;
-      for (auto& operand : pOp->operands_) {
-	// Remove zeros
-	if (operand->isZero()) {
-	  continue;
-	}
-	// Check if all operands are negate
-	if (Predicate::NEGATE != operand->predicate_) {
-	  allNegate = false;
-	}
-	if (Predicate::CONST == operand->predicate_) {
-	  // Merge constant operands
-	  constOperand->constant_ += operand->constant_;
-	} else if (Predicate::NEGATE == operand->predicate_ &&
-		   Predicate::CONST == (*operand)[0] -> predicate_) {
-	  constOperand->constant_ -= (*operand)[0] -> constant_;
-	} else if (Predicate::ADD == operand->predicate_) {
-	  // Concatenate add operands
-	  tmpOperands.insert(tmpOperands.end(),
-			     operand->operands_.begin(), operand->operands_.end());
-	} else {
-	  // Remove zeros
-	  tmpOperands.push_back(operand);
-	}
-      }
-      if (!constOperand->isZero()) {
-	tmpOperands.push_back(constOperand);
-      }
-      // All operands were 0
-      if (0 == tmpOperands.size()) {
-	return std::make_shared<Operation>(0);
-      }
-      // Only one opernd remains
-      if (1 == tmpOperands.size()) {
-	return tmpOperands[0];
-      }
-      // Invert if all operands are negative
-      if (allNegate) {
-	std::transform(tmpOperands.begin(), tmpOperands.end(), tmpOperands.begin(),
-		       [] (pOperation pOp) { return (*pOp)[0];});
-      }
-      return std::make_shared<Operation>(Predicate::ADD, tmpOperands);
-    }
-  case Predicate::MULTIPLY:
-    {
-      // TODO: add variable merge
-      struct comp_pOperation {
-	bool operator()(const pOperation& a, const pOperation& b) const {
-	  return a->name() < b->name();
-	}
-      };
-      std::map<pOperation, float, comp_pOperation> variables;
-
-      bool negate = false;
-      auto constOperand = std::make_shared<Operation>(1);
-      Operands tmpOperands;
-      for (auto& operand : pOp->operands_) {
-	// Zero
-	if (operand->isZero()) {
-	  return std::make_shared<Operation>(0);
-	}
-	// Ignore Ones
-	if (operand->isOne()) {
-	  continue;
-	}
-	if (Predicate::MULTIPLY == operand->predicate_) {
-	  // Concatenate MULTIPLY operands
-	  tmpOperands.insert(tmpOperands.end(),
-			     operand->operands_.begin(), operand->operands_.end());
-	  for (auto& operand2 : operand->operands_) {
-	    ++variables[operand2];
-	  }
-	} else if (Predicate::NEGATE == operand->predicate_) {
-	  // Merge negation
-	  tmpOperands.push_back((*operand)[0]);
-	  ++variables[operand->operands_[0]];
-	  negate = !negate;
-	} else if (Predicate::CONST == operand->predicate_) {
-	  // Merge constant operands
-	  constOperand->constant_ *= operand->constant_;
-	} else{
-	  tmpOperands.push_back(operand);
-	  ++variables[operand];
-	}
-      }
-      std::cout << "DEBUG: " << pOp->name() << std::endl;
-      for (auto& var: variables) {
-	std::cout << "    " << var.first->name() << " : " << var.second << std::endl;
-      }
-
-      if (!constOperand->isOne()) {
-	tmpOperands.push_back(constOperand);
-      }
-      if (0 == tmpOperands.size()) {
-	if (negate) {
-	  return -std::make_shared<Operation>(1);
-	} else {
-	  return std::make_shared<Operation>(1);
-	}
-      }
-      if (1 == tmpOperands.size()) {
-	if (negate) {
-	  return -tmpOperands[0];
-	} else {
-	  return tmpOperands[0];
-	}
-      }
-      if (negate) {
-	return -std::make_shared<Operation>(Predicate::MULTIPLY, tmpOperands);
+  }
+  case Operator::MULTIPLY: {
+    // Separate ADD type operands and the other type operands.
+    Operands nonAddOperands;
+    std::vector<Operands> addOperandsSet;
+    for (auto& operand_ : ret->operands_) {
+      if (operand_->operator_ == Operator::ADD) {
+	addOperandsSet.push_back(operand_->operands_);
       } else {
-	return std::make_shared<Operation>(Predicate::MULTIPLY, tmpOperands);
+	nonAddOperands.push_back(operand_);
+      }
+    }
+    // If no operand is ADD type, then it's expanded.
+    if (0 == addOperandsSet.size()) {
+      return ret;
+    }
+    // If all the operands are ADD type, moeve one to nonAddOperands.
+    if (0 == nonAddOperands.size()) {
+      nonAddOperands = addOperandsSet.back();
+      addOperandsSet.pop_back();
+    }
+    // Expand ADD operands one by one.
+    for (auto& addOperands : addOperandsSet) {
+      Operands newNonAddOperands;
+      for (auto& addOperand: addOperands) {
+	for (auto& nonAddOperand : nonAddOperands) {
+	  auto newNonAddOperand = constructMULTIPLY({nonAddOperand, addOperand});
+	  newNonAddOperands.push_back(newNonAddOperand);
+	}
+      }
+      nonAddOperands = newNonAddOperands;
+    }
+    // Reconstruct as addition.
+    return constructADD(nonAddOperands);
+  }
+  case Operator::POWER: {
+    auto base = ret->operands_[0];
+    auto exp = ret->operands_[1];
+    if (Operator::MULTIPLY == base->operator_) {
+      Operands operands;
+      for (auto& operand_ : base->operands_) {
+        operands.push_back(constructPOWER({operand_, exp}));
+      }
+      return constructMULTIPLY(operands);
+    }
+    if (Operator::CONST == exp->operator_) {
+      unsigned int exponent = std::round(exp->value_);
+      if (isNearlyEqual(exp->value_, exponent)) {
+        Operands operands;
+        for (unsigned int i = 0; i < exponent; ++i) {
+          auto operand = base;
+          operands.push_back(operand);
+        }
+        return constructMULTIPLY(operands);
       }
     }
   }
-  return pOp;
+  default:
+    return ret;
+  }
+}
+
+pExpression Symbol::Impl_::factor(const pExpression& pExp) {
+  // Factor each operand of this expression
+  pExpression ret = pExp;
+  for (size_t i=0; i < ret->operands_.size(); ++i) {
+    ret->operands_[i] = factor(ret->operands_[i]);
+  }
+  ret = flatten(ret);
+  // Factor this expression
+  switch(ret->operator_) {
+  case Operator::ADD:
+    {
+      for (auto& operand_ : ret->operands_) {
+      }
+      return ret;
+    }
+  default:
+    return ret;
+  }
+
+}
+
+double Symbol::Impl_::getCoeff(const pExpression& pExp) {
+  double ret = 1;
+  switch (pExp->operator_) {
+  case (Operator::CONST):
+    return pExp->value_;
+  case (Operator::NEGATE):
+    return -getCoeff(pExp->operands_[0]);
+  case (Operator::MULTIPLY):
+    for (auto& operand_ : pExp->operands_) {
+      if (operand_->isConst()) {
+        ret *= operand_->value_;
+      }
+    }
+    return ret;
+  default:
+    return 1;
+  }
 };
 
-Symbol::Impl_::pOperation Symbol::Impl_::simplify(const pOperation& pOp) {
-  auto pOpt = std::make_shared<Operation>(*pOp);
+pExpression Symbol::Impl_::getNonCoeff(const pExpression& pExp) {
+  Operands operands;
+  switch(pExp->operator_) {
+  case Operator::NEGATE:
+    return getNonCoeff(pExp->operands_[0]);
+  case Operator::MULTIPLY:
+    for (auto& operand_ : pExp->operands_) {
+      if (!operand_->isConst()) {
+        operands.push_back(operand_);
+      }
+    }
+    switch (operands.size()) {
+    case 0:
+      LOG(FATAL) << "MLTIPLY consists of only CONST expressions. "
+                 << "This is not intended design. Check the implementation.";
+    case 1:
+      return operands[0];
+    default:
+      return constructMULTIPLY(operands);
+    }
+  case Operator::CONST:
+    LOG(WARNING) << "getNonCoeff called on CONST Expression.";
+  default:
+    return pExp;
+  }
+};
+
+pExpression Symbol::Impl_::getBase(const pExpression& pExp) {
+  switch (pExp->operator_) {
+  case (Operator::POWER):
+    return pExp->operands_[0];
+  default:
+    return pExp;
+  }
+};
+
+pExpression Symbol::Impl_::getExponent(const pExpression& pExp) {
+  switch (pExp->operator_) {
+  case (Operator::POWER):
+    return pExp->operands_[1];
+  default:
+    return constructCONST(1);
+  }
+};
+
+pExpression Symbol::Impl_::simplify(const pExpression& pExp) {
+  pExpression ret = pExp;
   std::string before;
   do {
-    if (Predicate::CONST == pOpt->predicate_ ||
-	Predicate::VARIABLE == pOpt->predicate_) {
-      return pOpt;
-    }
-
-    before = pOpt->name();
-    Operands operands;
-    for (auto& operand : pOpt->operands_) {
-      operands.push_back(simplify(operand));
-    }
-    pOpt = reduce(std::make_shared<Operation>(pOpt->predicate_, operands));
-  } while (before != pOpt->name());
-  return pOpt;
+    before = ret->id();
+    ret = flatten(ret);
+    ret = expand(ret);
+    ret = merge(ret);
+    ret = sort(ret);
+  }
+  while(before != ret->id());
+  return ret;
 }
 
-Symbol::Impl_::pOperation Symbol::Impl_::differentiate(
-    const pOperation& dy, const pOperation& dx) {
-  if (dy->name() == dx->name()) {
-    return makeOperation(1);
-  }
-
-  switch(dy->predicate_) {
-  case Predicate::CONST:
-  case Predicate::VARIABLE:
-    return makeOperation(0);
-  case Predicate::NEGATE:
-    return -differentiate(dy->operands_[0], dx);
-  case Predicate::ADD:
-    {
-      Operands operands;
-      for (auto& operand : dy->operands_) {
-	operands.push_back(differentiate(operand, dx));
+std::string Symbol::Impl_::Exp::id() const {
+  switch(operator_) {
+  case Operator::CONST: {
+    if (isZero()) {
+      return "0";
+    } else if (isOne()) {
+      return "1";
+    } else {
+      std::stringstream ss;
+      int roundedValue = std::round(value_);
+      if (isNearlyEqual(value_, roundedValue)) {
+        ss << std::fixed << std::setprecision(0) << value_;
+      } else {
+        ss << std::fixed << std::setprecision(3) << value_;
       }
-      return makeOperation(dy->predicate_, operands);
+      return ss.str();
     }
-  case Predicate::MULTIPLY:
+  }
+  case Operator::VARIABLE:
+    return name_;
+  case Operator::NEGATE:
+    return " - " + operands_[0]->id();
+  case Operator::ADD:
     {
-      Operands operands;
-      for (size_t i = 0; i < dy->operands_.size(); ++i) {
-	Operands tmpOperands;
-	for (size_t j = 0; j < dy->operands_.size(); ++j) {
-	  if (i == j) {
-	    tmpOperands.push_back(differentiate(dy->operands_[j], dx));
-	  } else {
-	    tmpOperands.push_back(dy->operands_[j]);
-	  }
+      std::string ret;
+      for (auto& operand : operands_) {
+        auto append = operand->id();
+	if (0 != ret.size()) {
+          if (append.compare(0, 3, " - ")) {
+            ret += " + ";
+          }
 	}
-	auto pTmpOp = makeOperation("multiply", tmpOperands);
-	operands.push_back(pTmpOp);
+	ret += append;
       }
-      return makeOperation("add", operands);
+      return "(" + ret + ")";
     }
-  case Predicate::POWER:
+  case Operator::MULTIPLY:
     {
-      auto& coeff = dy->operands_[1];
-      auto& base = dy->operands_[0];
-      auto exp = (dy->operands_[1]) - makeOperation(1);
-      return coeff * (base ^ exp);
+      std::string ret;
+      for (auto& operand : operands_) {
+        auto append = operand->id();
+	if (0 != ret.size()) {
+          ret += " * ";
+	}
+	ret += append;
+      }
+      return "(" + ret + ")";
     }
-  case Predicate::LOG:
-    return differentiate(dy->operands_[0], dx) / dy->operands_[0];
+  case Operator::POWER:
+    {
+      return "(" + operands_[0]->id() + " ^ " + operands_[1]->id() + ")";
+    }
   }
-  LOG(FATAL) << "Not Implemented: " << pred2str(dy->predicate_);
+}
+
+pExpression Symbol::Impl_::operator - (const Operand v) {
+  return simplify(constructNEGATE(v));
+}
+
+pExpression Symbol::Impl_::operator + (const Operand v1, const Operand v2) {
+  return simplify(constructADD({v1, v2}));
+}
+
+pExpression Symbol::Impl_::operator + (const Operand v, const double c) {
+  return simplify(constructADD({v, constructCONST(c)}));
+}
+
+pExpression Symbol::Impl_::operator - (const Operand v1, const Operand v2) {
+  return simplify(constructADD({v1, -v2}));
+}
+
+pExpression Symbol::Impl_::operator * (const Operand o1, const Operand o2) {
+  return simplify(constructMULTIPLY({o1, o2}));
+}
+
+pExpression Symbol::Impl_::operator * (const Operand v, const double c) {
+  return simplify(constructMULTIPLY({v, constructCONST(c)}));
+}
+
+pExpression Symbol::Impl_::operator ^ (const Operand o1, const Operand o2) {
+  return simplify(constructPOWER({o1, o2}));
+}
+
+pExpression Symbol::Impl_::operator ^ (const Operand v, const double c) {
+  return simplify(constructPOWER({v, constructCONST(c)}));
+}
+
+pExpression Symbol::Impl_::operator ^ (const double c, const Operand v) {
+  return simplify(constructPOWER({constructCONST(c), v}));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-Symbol::Scalar::Scalar(const std::string name)
-  : pExp_(Impl_::makeOperation(name))
+Symbol::Expression::Expression(double c)
+  : pExp_(Impl_::constructCONST(c))
 {}
 
-Symbol::Scalar::Scalar(const double constant)
-  : pExp_(Impl_::makeOperation(constant))
+Symbol::Expression::Expression(std::string name)
+  : pExp_(Impl_::constructVARIABLE(name))
 {}
 
-Symbol::Scalar::Scalar(pExpression pExp)
-  : pExp_(pExp)
+Symbol::Expression::Expression(pExpression exp)
+  : pExp_(exp)
 {}
 
-std::string Symbol::Scalar::name() const { return this->pExp_->name(); }
-
-Symbol::Scalar Symbol::Scalar::operator - () const {
-  return Scalar(-this->pExp_);
-};
-
-Symbol::Scalar Symbol::Scalar::operator + (const Scalar& other) const {
-  return Scalar(this->pExp_ + other.pExp_);
-};
-
-Symbol::Scalar Symbol::Scalar::operator - (const Scalar& other) const {
-  return Scalar(this->pExp_ - other.pExp_);
-};
-
-Symbol::Scalar Symbol::Scalar::operator * (const Scalar& other) const {
-  return Scalar(this->pExp_ * other.pExp_);
-};
-
-Symbol::Scalar Symbol::Scalar::operator / (const Scalar& other) const {
-  return Scalar(this->pExp_ / other.pExp_);
-};
-
-Symbol::Scalar Symbol::Scalar::operator ^ (const Scalar& other) const {
-  return Scalar(this->pExp_ ^ other.pExp_);
-};
-
-bool Symbol::Scalar::operator == (const Scalar& other) const {
-  return this->pExp_ == other.pExp_;
-};
-
-bool Symbol::Scalar::operator != (const Scalar& other) const {
-  return !(*this == other);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-Symbol::Scalar Symbol::log(const Scalar& s) {
-  return Symbol::Scalar(log(s.pExp_));
+Symbol::Expression Symbol::Expression::expand() const {
+  return Impl_::expand(pExp_);
 }
 
-Symbol::Scalar Symbol::differentiate (const Scalar& dy, const Scalar& dx) {
-  return Scalar(simplify(differentiate(dy.pExp_, dx.pExp_)));
+Symbol::Expression Symbol::Expression::factor() const {
+  return Impl_::factor(pExp_);
 }
 
-std::ostream& Symbol::operator << (std::ostream& o, const Scalar& t) {
-  return o << t.pExp_->name();
+bool Symbol::operator == (const Expression& e1, const Expression& e2) {
+  return e1.pExp_->id() == e2.pExp_->id();
+}
+
+bool Symbol::operator == (const Expression& e, const std::string strExp) {
+  return e.pExp_->id() == strExp;
+}
+
+bool Symbol::operator == (const std::string strExp, const Expression& e) {
+  return e.pExp_ == strExp;
+}
+
+bool Symbol::operator != (const Expression& e1, const Expression& e2) {
+  return !(e1.pExp_ == e2.pExp_);
+}
+
+bool Symbol::operator != (const Expression& e, const std::string strExp) {
+  return !(e.pExp_ == strExp);
+}
+
+bool Symbol::operator != (const std::string strExp, const Expression& e) {
+  return !(strExp == e.pExp_);
+}
+
+Symbol::Expression Symbol::operator - (const Expression& e) {
+  return - e.pExp_;
+}
+
+Symbol::Expression Symbol::operator + (const Expression& e1, const Expression& e2) {
+  return e1.pExp_ + e2.pExp_;
+}
+
+Symbol::Expression Symbol::operator + (const Expression& e, const double c) {
+  return e.pExp_ + c;
+}
+
+Symbol::Expression Symbol::operator + (const double c, const Expression& e) {
+  return e.pExp_ + c;
+}
+
+Symbol::Expression Symbol::operator - (const Expression& e1, const Expression& e2) {
+  return e1.pExp_ - e2.pExp_;
+}
+
+Symbol::Expression Symbol::operator - (const Expression& e, const double c) {
+  return e.pExp_ - c;
+}
+
+Symbol::Expression Symbol::operator - (const double c, const Expression& e) {
+  return c - e.pExp_;
+}
+
+Symbol::Expression Symbol::operator * (const Expression& e1, const Expression& e2) {
+  return e1.pExp_ * e2.pExp_;
+}
+
+Symbol::Expression Symbol::operator * (const double c, const Expression& e) {
+  return e.pExp_ * c;
+}
+
+Symbol::Expression Symbol::operator * (const Expression& e, const double c) {
+  return e.pExp_ * c;
+}
+
+Symbol::Expression Symbol::operator ^ (const Expression& e1, const Expression& e2) {
+  return e1.pExp_ ^ e2.pExp_;
+}
+
+Symbol::Expression Symbol::operator ^ (const double c, const Expression& e) {
+  return e.pExp_ ^ c;
+}
+
+Symbol::Expression Symbol::operator ^ (const Expression& e, const double c) {
+  return e.pExp_ ^ c;
+}
+
+std::ostream& Symbol::operator <<(std::ostream& o, const Expression &e) {
+  return o << e.pExp_->id();
 }
