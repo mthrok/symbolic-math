@@ -1,5 +1,5 @@
 # Set up Google Test
-add_subdirectory(gtest)
+add_subdirectory(googletest/googletest)
 enable_testing()
 include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
 

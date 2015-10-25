@@ -1,6 +1,9 @@
 #include "symbol.hpp"
 #include "gtest/gtest.h"
 
+INITIALIZE_EASYLOGGINGPP
+
+
 TEST(Scalar, ConstInitialization) {
   Symbol::Scalar c0(0);
   Symbol::Scalar c1(1);

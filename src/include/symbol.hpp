@@ -3,21 +3,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
-
-#define DEBUG
-
-std::string genErrorString(const std::string& message) {
-  return message;
-}
-
-template<typename... T>
-std::string genErrorString(const std::string& message, T... messages) {
-  return message + " : " + genErrorString(messages...);
-}
-
-#define GEN_DEBUG_INFO				\
-  std::string(__func__) + " : " +		\
-  std::to_string(__LINE__) + " : "
+#include "easylogging++.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Forward Declarations
@@ -112,7 +98,7 @@ class Symbol::Impl_::Operation {
   const Operands    operands_;
   double            constant_;
 
-  void assertOperationConsistency(const std::string info) const;
+  bool assertOperationConsistency() const;
 
 public:
   // Construct operations with zero operand. (= variable)
@@ -210,8 +196,9 @@ std::string Symbol::Impl_::pred2str(const Predicate& p) {
     return "log";
   case Impl_::Predicate::POWER:
     return "power";
+  default:
+    LOG(FATAL) << "Not implemented.";
   }
-  throw std::runtime_error(GEN_DEBUG_INFO + "Not implemented.");
 }
 
 Symbol::Impl_::Predicate Symbol::Impl_::str2pred(const std::string& s) {
@@ -222,7 +209,7 @@ Symbol::Impl_::Predicate Symbol::Impl_::str2pred(const std::string& s) {
   if (s == "multiply") { return Impl_::Predicate::MULTIPLY; }
   if (s == "log")      { return Impl_::Predicate::LOG; }
   if (s == "power")    { return Impl_::Predicate::POWER; }
-  throw std::runtime_error(GEN_DEBUG_INFO + "Not implemented:" + s);
+  LOG(FATAL) << "Not implemented:" + s;
 }
 
 std::string Symbol::Impl_::genStringExpression(
@@ -269,7 +256,7 @@ Symbol::Impl_::Operation::Operation(const std::string name)
   , operands_()
   , constant_()
 {
-  assertOperationConsistency(GEN_DEBUG_INFO);
+  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
 }
 
 Symbol::Impl_::Operation::Operation(const double v)
@@ -278,7 +265,7 @@ Symbol::Impl_::Operation::Operation(const double v)
   , operands_()
   , constant_(v)
 {
-  assertOperationConsistency(GEN_DEBUG_INFO);
+  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
 }
 
 Symbol::Impl_::Operation::Operation(const Predicate& pred, Operand operand)
@@ -287,7 +274,7 @@ Symbol::Impl_::Operation::Operation(const Predicate& pred, Operand operand)
   , operands_({operand})
   , constant_()
 {
-  assertOperationConsistency(GEN_DEBUG_INFO);
+  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
 }
 
 Symbol::Impl_::Operation::Operation(const std::string pred, Operand operand)
@@ -296,7 +283,7 @@ Symbol::Impl_::Operation::Operation(const std::string pred, Operand operand)
   , operands_({operand})
   , constant_()
 {
-  assertOperationConsistency(GEN_DEBUG_INFO);
+  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
 }
 
 Symbol::Impl_::Operation::Operation(const Predicate& pred, Operands operands)
@@ -305,7 +292,7 @@ Symbol::Impl_::Operation::Operation(const Predicate& pred, Operands operands)
   , operands_(operands)
   , constant_()
 {
-  assertOperationConsistency(GEN_DEBUG_INFO);
+  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
 };
 
 Symbol::Impl_::Operation::Operation(const std::string pred, Operands operands)
@@ -314,45 +301,31 @@ Symbol::Impl_::Operation::Operation(const std::string pred, Operands operands)
   , operands_(operands)
   , constant_()
 {
-  assertOperationConsistency(GEN_DEBUG_INFO);
+  ELPP_ASSERT(assertOperationConsistency(), "Invalid Operation pattern. " + name_);
 };
 
-void Symbol::Impl_::Operation::assertOperationConsistency(
-    const std::string info) const {
+bool Symbol::Impl_::Operation::assertOperationConsistency() const {
   auto nOperands = operands_.size();
-  auto nOpStr = std::to_string(nOperands);
   switch(predicate_) {
   case Predicate::CONST:
   case Predicate::VARIABLE:
-    if (nOperands)  {
-      auto what = info + "Inconsistent Operation. " +
-	"predicate:" + pred2str(predicate_) + " #ops:" + nOpStr;
-      throw std::invalid_argument(what);
-    }
-    return;
+    if (nOperands)
+      return false;
+    return true;
   case Predicate::LOG:
   case Predicate::NEGATE:
-    if (1 != nOperands) {
-      auto what = info + "Inconsistent Operation. " +
-	"predicate:" + pred2str(predicate_) + " #ops:" + nOpStr;
-      throw std::invalid_argument(what);
-    }
-    return;
+    if (1 != nOperands)
+      return false;
+    return true;
   case Predicate::POWER:
-    if (2 != nOperands) {
-      auto what = info + "Inconsistent Operation. " +
-	"predicate:" + pred2str(predicate_) + " #ops:" + nOpStr;
-      throw std::invalid_argument(what);
-    }
-    return;
+    if (2 != nOperands)
+      return false;
+    return true;
   case Predicate::ADD:
   case Predicate::MULTIPLY:
-    if (2 > nOperands) {
-      auto what = info + "Inconsistent Operation. " +
-	"predicate:" + pred2str(predicate_) + " #ops:" + nOpStr;
-      throw std::invalid_argument(what);
-    }
-    return;
+    if (2 > nOperands)
+      return false;
+    return true;
   }
 };
 
@@ -630,9 +603,7 @@ Symbol::Impl_::pOperation Symbol::Impl_::differentiate(
   case Predicate::LOG:
     return differentiate(dy->operands_[0], dx) / dy->operands_[0];
   }
-  std::string what =
-    GEN_DEBUG_INFO + "Not Implemented: " + pred2str(dy->predicate_);
-  throw std::runtime_error(what);
+  LOG(FATAL) << "Not Implemented: " << pred2str(dy->predicate_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
