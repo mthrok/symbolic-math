@@ -124,8 +124,6 @@ public:
   friend pExpression sort(const pExpression &pExp,
 			  bool(*compare)(const pExpression&, const pExpression&));
 
-  friend pExpression simplify(const pExpression &pExp);
-
   friend pExpression expand(const pExpression &pExp);
   friend pExpression factor(const pExpression &pExp);
 
@@ -163,14 +161,13 @@ public:
 namespace {
   struct defaultCompare {
     inline bool operator() (const pExpression& e1, const pExpression& e2) const {
-      if (e1->isConst() && !e2->isConst()) {
+      auto const1 = e1->isConst(), const2 = e2->isConst();
+      if (const1 && !const2) {
         return true;
-      } else if (!e1->isConst() && e2->isConst()) {
+      } else if (!const1 && const2) {
         return false;
       } else {
-        auto id1 = e1->id(), id2 = e2->id();
-        return std::lexicographical_compare(id1.begin(), id1.end(),
-                                            id2.begin(), id2.end());
+        return e1->id() < e2->id();
       }
     }
   };
@@ -825,11 +822,11 @@ Symbol::Expression Symbol::operator * (const Expression& e1, const Expression& e
 }
 
 Symbol::Expression Symbol::operator * (const double c, const Expression& e) {
-  return e * Expression(c);
+  return Expression(c) * e;
 }
 
 Symbol::Expression Symbol::operator * (const Expression& e, const double c) {
-  return e * Expression(c);
+  return Expression(c) * e;
 }
 
 Symbol::Expression Symbol::operator ^ (const Expression& e1, const Expression& e2) {
