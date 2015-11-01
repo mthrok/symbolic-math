@@ -334,6 +334,7 @@ TEST(Expression, VariablePower) {
   EXPECT_EQ((x * y) ^ 1, x * y);
   EXPECT_EQ((x * y) ^ 2, (x ^ 2) * (y ^ 2));
   EXPECT_EQ((x + y) ^ 2, x * x + x * y + x * y + y * y);
+  EXPECT_EQ((x + y) ^ 2 - (x * x + x * y + x * y + y * y), 0);
 
   EXPECT_EQ(x ^ (x - x), 1);
 

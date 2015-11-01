@@ -53,9 +53,7 @@ namespace Symbol {
     pExpression expand(const pExpression &pExp);
     pExpression factor(const pExpression &pExp);
 
-    double getCoeff(const pExpression &pExp);
-    pExpression getNonCoeff(const pExpression &pExp);
-
+    Operands decompose2(const pExpression &pExp);
     Operands decompose3(const pExpression &pExp);
 
     pExpression simplify(const pExpression &pExp);
@@ -130,12 +128,8 @@ public:
   friend pExpression expand(const pExpression &pExp);
   friend pExpression factor(const pExpression &pExp);
 
-  friend double getCoeff(const pExpression &pExp);
-  friend pExpression getNonCoeff(const pExpression &pExp);
-
+  friend Operands decompose2(const pExpression &pExp);
   friend Operands decompose3(const pExpression &pExp);
-  friend pExpression getBase(const pExpression &pExp);
-  friend pExpression getExponent(const pExpression &pExp);
 
   friend pExpression Impl_::operator - (const Operand o1, const Operand o2);
   friend pExpression Impl_::operator + (const Operand o1, const Operand o2);
@@ -355,21 +349,16 @@ pExpression Symbol::Impl_::merge(const pExpression& pExp) {
   switch(ret->operator_) {
   case Operator::ADD: {
     // Merge constant terms and the coefficients of non-constant terms
-    auto constOperand = constructZero();
-    std::map<pExpression, double, defaultCompare> nonConstOperands;
+    std::map<pExpression, double, defaultCompare> operandCounts;
     for (auto& operand_ : ret->operands_) {
-      if (operand_->isConst()) {
-	constOperand->value_ += operand_->value_;
-      } else {
-        nonConstOperands[getNonCoeff(operand_)] += getCoeff(operand_);
-      }
+      auto elems = decompose2(operand_);
+      auto coeff = elems[0];
+      auto nonCoeff = elems[1];
+      operandCounts[nonCoeff] += coeff->value_;
     }
     // Reconstruct operands
     Operands operands;
-    if (!isNearlyEqual(constOperand->value_, 0.0)) {
-      operands.push_back(constOperand);
-    }
-    for (auto& entry : nonConstOperands) {
+    for (auto& entry : operandCounts) {
       if (isNearlyEqual(entry.second, 0.0)) {
         continue;
       }
@@ -588,46 +577,38 @@ pExpression Symbol::Impl_::factor(const pExpression& pExp) {
 
 }
 
-double Symbol::Impl_::getCoeff(const pExpression& pExp) {
-  double ret = 1;
+/// Decompose an Expression into coefficient and non-coefficient part
+/// such that pExp == coeff * non-coeff
+/// This function is made for simplifying the merge method.
+/// This decomposition is not necessarily generally apprecable.
+Operands Symbol::Impl_::decompose2(const pExpression &pExp) {
   switch (pExp->operator_) {
   case Operator::CONST:
-    return pExp->value_;
-  case Operator::NEGATE:
-    return -getCoeff(pExp->operands_[0]);
-  case Operator::MULTIPLY:
-    for (auto& operand_ : pExp->operands_) {
-      if (operand_->isConst()) {
-        ret *= operand_->value_;
-      }
-    }
+    // return {pExp, NULL};
+    return {pExp, constructOne()};
+  case Operator::VARIABLE:
+    return {constructOne(), pExp};
+  case Operator::NEGATE: {
+    Operands ret = decompose2(pExp->operands_[0]);
+    ret[0]->value_ *= -1;
     return ret;
-  default:
-    return 1;
   }
-};
-
-pExpression Symbol::Impl_::getNonCoeff(const pExpression& pExp) {
-  Operands operands;
-  switch(pExp->operator_) {
-  case Operator::CONST:
-    LOG(FATAL) << "getNonCoeff called on CONST Expression.";
-  case Operator::NEGATE:
-    return getNonCoeff(pExp->operands_[0]);
-  case Operator::MULTIPLY:
-    for (auto& operand_ : pExp->operands_) {
-      if (!operand_->isConst()) {
-        operands.push_back(operand_);
+  case Operator::ADD:
+    return {constructOne(), pExp};
+  case Operator::MULTIPLY: {
+    double constant = 1;
+    Operands operands;
+    for (auto& operand : pExp->operands_) {
+      if (operand->isConst()) {
+        constant *= operand->value_;
+      } else {
+        operands.push_back(operand);
       }
     }
-    if (0 == operands.size()) {
-      LOG(FATAL) << "MLTIPLY consists of only CONST expressions. "
-                 << "This should be merged before calling getNonCoeff. "
-                 << "Check the implementation.";
-    }
-    return constructMULTIPLY(operands);
-  default:
-    return pExp;
+    return {constructCONST(constant), constructMULTIPLY(operands)};
+  }
+  case Operator::POWER:
+    return {constructOne(), pExp};
   }
 };
 
@@ -663,7 +644,6 @@ Operands Symbol::Impl_::decompose3(const pExpression &pExp) {
   case Operator::POWER:
     return {constructOne(), pExp->operands_[0], pExp->operands_[1]};
   }
-
 };
 
 pExpression Symbol::Impl_::simplify(const pExpression& pExp) {
@@ -793,7 +773,7 @@ Symbol::Expression Symbol::Expression::factor() const {
 }
 
 bool Symbol::operator == (const Expression& e1, const Expression& e2) {
-  return e1.pExp_->id() == e2.pExp_->id();
+  return (e1.pExp_ - e2.pExp_)->isZero();
 }
 
 bool Symbol::operator == (const Expression& e, const std::string strExp) {
