@@ -662,10 +662,14 @@ pExpression Symbol::Impl_::simplify(const pExpression& pExp) {
     before = ret->id();
     ret = flatten(ret);
     ret = expand(ret);
-    ret = merge(ret);
-    ret = sort(ret);
   }
   while(before != ret->id());
+  do {
+    before = ret->id();
+    ret = merge(ret);
+  }
+  while(before != ret->id());
+  ret = sort(ret);
   return ret;
 }
 
