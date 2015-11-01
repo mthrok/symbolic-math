@@ -41,8 +41,8 @@ namespace Symbol {
     pExpression constructOne();
     pExpression constructCONST(const double c);
     pExpression constructVARIABLE(const std::string name);
-    pExpression constructADD(const Operands ops);
     pExpression constructNEGATE(const Operand o);
+    pExpression constructADD(const Operands ops);
     pExpression constructMULTIPLY(const Operands ops);
     pExpression constructPOWER(const Operands ops);
 
@@ -53,6 +53,8 @@ namespace Symbol {
     pExpression expand(const pExpression &pExp);
     pExpression factor(const pExpression &pExp);
 
+    pExpression mergeADD(const pExpression &pExp);
+
     Operands decompose2(const pExpression &pExp);
     Operands decompose3(const pExpression &pExp);
 
@@ -60,13 +62,9 @@ namespace Symbol {
 
     pExpression operator - (const Operand o);
     pExpression operator + (const Operand o1, const Operand o2);
-    pExpression operator + (const Operand o, const double c);
     pExpression operator - (const Operand o1, const Operand o2);
     pExpression operator * (const Operand o1, const Operand o2);
-    pExpression operator * (const Operand o, const double c);
     pExpression operator ^ (const Operand o1, const Operand o2);
-    pExpression operator ^ (const Operand o, const double c);
-    pExpression operator ^ (const double c, const Operand o);
   };
 
   bool operator == (const Expression &e1, const Expression &e2);
@@ -76,12 +74,12 @@ namespace Symbol {
   bool operator != (const Expression &e, const std::string strExp);
   bool operator != (const std::string strExp, const Expression &e);
   Expression operator - (const Expression &e);
+  Expression operator + (const Expression &e1, const Expression &e2);
   Expression operator + (const Expression &e, const double c);
   Expression operator + (const double c, const Expression &e);
-  Expression operator + (const Expression &e1, const Expression &e2);
+  Expression operator - (const Expression &e1, const Expression &e2);
   Expression operator - (const Expression &e, const double c);
   Expression operator - (const double c, const Expression &e);
-  Expression operator - (const Expression &e1, const Expression &e2);
   Expression operator * (const Expression &e1, const Expression &e2);
   Expression operator * (const Expression &e, const double c);
   Expression operator * (const double c, const Expression &e);
@@ -98,6 +96,9 @@ enum class Symbol::Impl_::Operator {
 };
 
 class Symbol::Impl_::Exp {
+#ifdef TEST_IMPL_
+public:
+#endif
   std::string name_;
   double value_;
   Operator operator_;
@@ -128,16 +129,10 @@ public:
   friend pExpression expand(const pExpression &pExp);
   friend pExpression factor(const pExpression &pExp);
 
+  friend pExpression mergeADD(const pExpression &pExp);
+
   friend Operands decompose2(const pExpression &pExp);
   friend Operands decompose3(const pExpression &pExp);
-
-  friend pExpression Impl_::operator - (const Operand o1, const Operand o2);
-  friend pExpression Impl_::operator + (const Operand o1, const Operand o2);
-  friend pExpression Impl_::operator + (const Operand e, const double c);
-  friend pExpression Impl_::operator * (const Operand o1, const Operand o2);
-  friend pExpression Impl_::operator * (const Operand e, const double c);
-  friend pExpression Impl_::operator ^ (const Operand o1, const Operand o2);
-  friend pExpression Impl_::operator ^ (const Operand e, const double c);
 };
 
 class Symbol::Expression {
@@ -154,26 +149,10 @@ public:
   friend bool operator == (const Expression &e1, const Expression &e2);
   friend bool operator == (const Expression &e, const std::string strExp);
   friend bool operator == (const std::string strExp, const Expression &e);
-  friend bool operator != (const Expression &e1, const Expression &e2);
-  friend bool operator != (const Expression &e, const std::string strExp);
-  friend bool operator != (const std::string strExp, const Expression &e);
 
   friend Expression operator - (const Expression &e);
-
-  friend Expression operator + (const Expression &e, const double c);
-  friend Expression operator + (const double c, const Expression &e);
   friend Expression operator + (const Expression &e1, const Expression &e2);
-
-  friend Expression operator - (const Expression &e, const double c);
-  friend Expression operator - (const double c, const Expression &e);
-  friend Expression operator - (const Expression &e1, const Expression &e2);
-
-  friend Expression operator * (const Expression &e, const double c);
-  friend Expression operator * (const double c, const Expression &e);
   friend Expression operator * (const Expression &e1, const Expression &e2);
-
-  friend Expression operator ^ (const Expression &e, const double c);
-  friend Expression operator ^ (const double c, const Expression &e);
   friend Expression operator ^ (const Expression &e1, const Expression &e2);
 
   friend std::ostream& operator << (std::ostream& o, const Expression &e);
@@ -312,13 +291,16 @@ pExpression Symbol::Impl_::flatten(const pExpression& pExp) {
   // Flatten this expression.
   switch(ret->operator_) {
   case Operator::NEGATE:
-    switch (ret->operands_[0]->operator_) {
-    case Operator::NEGATE:  // Remove double negation.
-      return ret->operands_[0]->operands_[0];
-    case Operator::CONST:   // Put negation into constant
-      return constructCONST(-ret->operands_[0]->value_);
-    default:
-      return ret;
+    {
+      Operand innerOperand = ret->operands_[0];
+      switch (innerOperand->operator_) {
+      case Operator::NEGATE:  // Remove double negation.
+        return innerOperand->operands_[0];
+      case Operator::CONST:   // Put negation into constant
+        return constructCONST(-innerOperand->value_);
+      default:
+        return ret;
+      }
     }
   case Operator::ADD:
   case Operator::MULTIPLY:
@@ -348,6 +330,7 @@ pExpression Symbol::Impl_::merge(const pExpression& pExp) {
   // Merge this expression.
   switch(ret->operator_) {
   case Operator::ADD: {
+    // return mergeADD(ret);
     // Merge constant terms and the coefficients of non-constant terms
     std::map<pExpression, double, defaultCompare> operandCounts;
     for (auto& operand_ : ret->operands_) {
@@ -488,8 +471,8 @@ pExpression Symbol::Impl_::expand(const pExpression& pExp) {
       for (auto& operand_ : innerOperand->operands_) {
         newOperands.push_back(constructNEGATE(operand_));
       }
-      return  MAKE_SHARED_EXP(innerOperand->name_, innerOperand->operator_,
-                              newOperands, innerOperand->value_);
+      return MAKE_SHARED_EXP(innerOperand->name_, innerOperand->operator_,
+                             newOperands, innerOperand->value_);
     }
     default:
       return ret;
@@ -531,19 +514,19 @@ pExpression Symbol::Impl_::expand(const pExpression& pExp) {
   }
   case Operator::POWER: {
     auto base = ret->operands_[0];
-    auto exp = ret->operands_[1];
+    auto exponent = ret->operands_[1];
     if (Operator::MULTIPLY == base->operator_) {
       Operands operands;
       for (auto& operand_ : base->operands_) {
-        operands.push_back(constructPOWER({operand_, exp}));
+        operands.push_back(constructPOWER({operand_, exponent}));
       }
       return constructMULTIPLY(operands);
     }
-    if (Operator::CONST == exp->operator_) {
-      unsigned int exponent = std::round(exp->value_);
-      if (isNearlyEqual(exp->value_, exponent)) {
+    if (Operator::CONST == exponent->operator_) {
+      unsigned int expoConst = std::round(exponent->value_);
+      if (isNearlyEqual(exponent->value_, expoConst)) {
         Operands operands;
-        for (unsigned int i = 0; i < exponent; ++i) {
+        for (unsigned int i = 0; i < expoConst; ++i) {
           auto operand = base;
           operands.push_back(operand);
         }
@@ -557,6 +540,7 @@ pExpression Symbol::Impl_::expand(const pExpression& pExp) {
 }
 
 pExpression Symbol::Impl_::factor(const pExpression& pExp) {
+/*
   // Factor each operand of this expression
   pExpression ret = pExp;
   for (size_t i=0; i < ret->operands_.size(); ++i) {
@@ -574,18 +558,50 @@ pExpression Symbol::Impl_::factor(const pExpression& pExp) {
   default:
     return ret;
   }
-
+*/
+  return pExp;
 }
+
+pExpression Symbol::Impl_::mergeADD(const pExpression& pExp) {
+  if (Operator::ADD != pExp->operator_) {
+    LOG(FATAL) << "mergeADD was called ont non ADD Expression.";
+  }
+  // Merge constant terms and the coefficients of non-constant terms
+  std::map<pExpression, double, defaultCompare> operandCounts;
+  for (auto& operand_ : pExp->operands_) {
+    auto elems = decompose2(operand_);
+    auto coeff = elems[0];
+    auto nonCoeff = elems[1];
+    operandCounts[nonCoeff] += coeff->value_;
+  }
+  // Reconstruct Expression
+  Operands operands;
+  for (auto& entry : operandCounts) {
+    if (isNearlyEqual(entry.second, 0.0)) {
+      continue;
+    } else if (isNearlyEqual(entry.second, 1.0)) {
+      operands.push_back(entry.first);
+    } else if (isNearlyEqual(entry.second, -1.0)) {
+      operands.push_back(constructNEGATE(entry.first));
+    } else {
+      Operand coeff = constructCONST(entry.second);
+      operands.push_back(constructMULTIPLY({coeff, entry.first}));
+    }
+  }
+  return constructADD(operands);
+}
+
 
 /// Decompose an Expression into coefficient and non-coefficient part
 /// such that pExp == coeff * non-coeff
-/// This function is made for simplifying the merge method.
+/// This function is made for simplifying the mergeADD.
 /// This decomposition is not necessarily generally apprecable.
 Operands Symbol::Impl_::decompose2(const pExpression &pExp) {
   switch (pExp->operator_) {
   case Operator::CONST:
-    // return {pExp, NULL};
     return {pExp, constructOne()};
+  case Operator::ADD:
+  case Operator::POWER:
   case Operator::VARIABLE:
     return {constructOne(), pExp};
   case Operator::NEGATE: {
@@ -593,8 +609,6 @@ Operands Symbol::Impl_::decompose2(const pExpression &pExp) {
     ret[0]->value_ *= -1;
     return ret;
   }
-  case Operator::ADD:
-    return {constructOne(), pExp};
   case Operator::MULTIPLY: {
     double constant = 1;
     Operands operands;
@@ -607,8 +621,6 @@ Operands Symbol::Impl_::decompose2(const pExpression &pExp) {
     }
     return {constructCONST(constant), constructMULTIPLY(operands)};
   }
-  case Operator::POWER:
-    return {constructOne(), pExp};
   }
 };
 
@@ -723,10 +735,6 @@ pExpression Symbol::Impl_::operator + (const Operand v1, const Operand v2) {
   return simplify(constructADD({v1, v2}));
 }
 
-pExpression Symbol::Impl_::operator + (const Operand v, const double c) {
-  return simplify(constructADD({v, constructCONST(c)}));
-}
-
 pExpression Symbol::Impl_::operator - (const Operand v1, const Operand v2) {
   return simplify(constructADD({v1, -v2}));
 }
@@ -735,20 +743,8 @@ pExpression Symbol::Impl_::operator * (const Operand o1, const Operand o2) {
   return simplify(constructMULTIPLY({o1, o2}));
 }
 
-pExpression Symbol::Impl_::operator * (const Operand v, const double c) {
-  return simplify(constructMULTIPLY({v, constructCONST(c)}));
-}
-
 pExpression Symbol::Impl_::operator ^ (const Operand o1, const Operand o2) {
   return simplify(constructPOWER({o1, o2}));
-}
-
-pExpression Symbol::Impl_::operator ^ (const Operand v, const double c) {
-  return simplify(constructPOWER({v, constructCONST(c)}));
-}
-
-pExpression Symbol::Impl_::operator ^ (const double c, const Operand v) {
-  return simplify(constructPOWER({constructCONST(c), v}));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -781,19 +777,19 @@ bool Symbol::operator == (const Expression& e, const std::string strExp) {
 }
 
 bool Symbol::operator == (const std::string strExp, const Expression& e) {
-  return e.pExp_ == strExp;
+  return e == strExp;
 }
 
 bool Symbol::operator != (const Expression& e1, const Expression& e2) {
-  return !(e1.pExp_ == e2.pExp_);
+  return !(e1 == e2);
 }
 
 bool Symbol::operator != (const Expression& e, const std::string strExp) {
-  return !(e.pExp_ == strExp);
+  return !(e == strExp);
 }
 
 bool Symbol::operator != (const std::string strExp, const Expression& e) {
-  return !(strExp == e.pExp_);
+  return !(e == strExp);
 }
 
 Symbol::Expression Symbol::operator - (const Expression& e) {
@@ -805,23 +801,23 @@ Symbol::Expression Symbol::operator + (const Expression& e1, const Expression& e
 }
 
 Symbol::Expression Symbol::operator + (const Expression& e, const double c) {
-  return e.pExp_ + c;
+  return e + Expression(c);
 }
 
 Symbol::Expression Symbol::operator + (const double c, const Expression& e) {
-  return e.pExp_ + c;
+  return e + Expression(c);
 }
 
 Symbol::Expression Symbol::operator - (const Expression& e1, const Expression& e2) {
-  return e1.pExp_ - e2.pExp_;
+  return e1 + (-e2);
 }
 
 Symbol::Expression Symbol::operator - (const Expression& e, const double c) {
-  return e.pExp_ - c;
+  return e - Expression(c);
 }
 
 Symbol::Expression Symbol::operator - (const double c, const Expression& e) {
-  return c - e.pExp_;
+  return Expression(c) - e;
 }
 
 Symbol::Expression Symbol::operator * (const Expression& e1, const Expression& e2) {
@@ -829,11 +825,11 @@ Symbol::Expression Symbol::operator * (const Expression& e1, const Expression& e
 }
 
 Symbol::Expression Symbol::operator * (const double c, const Expression& e) {
-  return e.pExp_ * c;
+  return e * Expression(c);
 }
 
 Symbol::Expression Symbol::operator * (const Expression& e, const double c) {
-  return e.pExp_ * c;
+  return e * Expression(c);
 }
 
 Symbol::Expression Symbol::operator ^ (const Expression& e1, const Expression& e2) {
@@ -841,11 +837,11 @@ Symbol::Expression Symbol::operator ^ (const Expression& e1, const Expression& e
 }
 
 Symbol::Expression Symbol::operator ^ (const double c, const Expression& e) {
-  return e.pExp_ ^ c;
+  return Expression(c) ^ e;
 }
 
 Symbol::Expression Symbol::operator ^ (const Expression& e, const double c) {
-  return e.pExp_ ^ c;
+  return e ^ Expression(c);
 }
 
 std::ostream& Symbol::operator <<(std::ostream& o, const Expression &e) {

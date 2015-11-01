@@ -132,17 +132,17 @@ TEST(Expression, MixedAddition) {
 
   EXPECT_EQ(x + one + one, two + x);
   EXPECT_NE(y + one + one, two + x);
-  EXPECT_NE(x + y + one, y + one + x);
-  EXPECT_NE(x + y + one + one, y + two + x);
 
+  EXPECT_EQ(x + y + one, y + one + x);
   EXPECT_EQ(x + one + one + x, x + two + x);
+  EXPECT_EQ(x + y + one + one, y + two + x);
 }
 
 TEST(Expression, ConstantSubtraction) {
   Symbol::Expression zero(0);
   Symbol::Expression one(1);
   Symbol::Expression two(2);
-  Symbol::Expression none(-1);
+  Symbol::Expression n_one(-1);
 
   EXPECT_EQ(one - one, "0");
   EXPECT_EQ(one - one, zero);
@@ -152,14 +152,13 @@ TEST(Expression, ConstantSubtraction) {
 
   EXPECT_EQ(zero - zero, zero);
   EXPECT_EQ(one - zero, two - one);
+  EXPECT_EQ(one - zero, one);
 
   EXPECT_NE(two - one, zero);
-  EXPECT_NE(one - zero, one);
-
   EXPECT_NE(two - one - zero, two);
   EXPECT_EQ(two - one - one, zero);
 
-  EXPECT_EQ(one - none, two);
+  EXPECT_EQ(one - n_one, two);
 }
 
 TEST(Expression, VariableSubtraction) {
@@ -235,11 +234,11 @@ TEST(Expression, ConstantMultiplicatoin) {
   EXPECT_NE(two, one * zero);
 
   EXPECT_EQ(two * two, 4);
-  EXPECT_NE(two * one, one * two);
-  EXPECT_NE(two * two, two * two);
+  EXPECT_EQ(two * one, one * two);
+  EXPECT_EQ(two * two, two * two);
 
-  EXPECT_NE(-two * two, -4);
-  EXPECT_NE(-(two * two), -4);
+  EXPECT_EQ(-two * two, -4);
+  EXPECT_EQ(-(two * two), -4);
 }
 
 TEST(Expression, VariableMultiplicatoin) {
@@ -334,7 +333,6 @@ TEST(Expression, VariablePower) {
   EXPECT_EQ((x * y) ^ 1, x * y);
   EXPECT_EQ((x * y) ^ 2, (x ^ 2) * (y ^ 2));
   EXPECT_EQ((x + y) ^ 2, x * x + x * y + x * y + y * y);
-  EXPECT_EQ((x + y) ^ 2 - (x * x + x * y + x * y + y * y), 0);
 
   EXPECT_EQ(x ^ (x - x), 1);
 
