@@ -40,7 +40,7 @@ namespace Symbol {
     pExpression constructZero();
     pExpression constructOne();
     pExpression constructCONST(const double c);
-    pExpression constructVARIABLE(const std::string name);
+    pExpression constructVARIABLE(const std::string name, const double c);
     pExpression constructNEGATE(const Operand o);
     pExpression constructADD(const Operands ops);
     pExpression constructMULTIPLY(const Operands ops);
@@ -134,6 +134,9 @@ public:
 
   std::string id() const;
 
+  void assign(double value);
+  double evaluate() const;
+
   friend pExpression simplify(pExpression pExp);
   friend pExpression sort(pExpression pExp);
   friend pExpression flatten(pExpression pExp);
@@ -165,7 +168,7 @@ class Symbol::Expression {
 
 public:
   Expression(double constant);
-  Expression(std::string name);
+  Expression(const std::string name, const double c = 1);
 
   Expression differentiate(const Expression &dx);
 
@@ -179,6 +182,9 @@ public:
   friend Expression operator ^ (const Expression &e1, const Expression &e2);
   friend Expression operator / (const Expression &e1, const Expression &e2);
   friend Expression log (const Expression &e);
+
+  Expression& assign(double value);
+  double evaluate() const;
 
   friend std::ostream& operator << (std::ostream& o, const Expression &e);
 };
@@ -288,8 +294,8 @@ pExpression Symbol::Impl_::constructCONST(const double c) {
   return MAKE_SHARED_EXP("const", Operator::CONST, Operands {}, c);
 }
 
-pExpression Symbol::Impl_::constructVARIABLE(const std::string name) {
-  return MAKE_SHARED_EXP(name, Operator::VARIABLE, Operands {}, 0);
+pExpression Symbol::Impl_::constructVARIABLE(const std::string name, const double c) {
+  return MAKE_SHARED_EXP(name, Operator::VARIABLE, Operands {}, c);
 }
 
 pExpression Symbol::Impl_::constructNEGATE(const Operand v) {
@@ -833,6 +839,47 @@ std::string Symbol::Impl_::Exp::id() const {
   }
 }
 
+void Symbol::Impl_::Exp::assign(double value) {
+  switch(operator_) {
+  case Operator::CONST:
+  case Operator::VARIABLE:
+    value_ = value;
+    return;
+  default:
+    LOG(FATAL) << "Cannot assign value to compound expressions.";
+  }
+}
+
+double Symbol::Impl_::Exp::evaluate() const {
+  switch(operator_) {
+  case Operator::CONST:
+  case Operator::VARIABLE:
+    return value_;
+  case Operator::NEGATE:
+    return -operands_[0]->evaluate();
+  case Operator::ADD: {
+    double ret = 0;
+    for (auto& operand_ : operands_) {
+      ret += operand_->evaluate();
+    }
+    return ret;
+  }
+  case Operator::MULTIPLY: {
+    double ret = 1;
+    for (auto& operand_ : operands_) {
+      ret *= operand_->evaluate();
+    }
+    return ret;
+  }
+  case Operator::POWER: {
+    return std::pow(operands_[0]->evaluate(),
+                    operands_[1]->evaluate());
+  }
+  case Operator::LOG:
+    return std::log(operands_[0]->evaluate());
+  }
+}
+
 pExpression Symbol::Impl_::operator - (const Operand v) {
   return simplify(constructNEGATE(v));
 }
@@ -866,8 +913,8 @@ Symbol::Expression::Expression(double c)
   : pExp_(Impl_::constructCONST(c))
 {}
 
-Symbol::Expression::Expression(std::string name)
-  : pExp_(Impl_::constructVARIABLE(name))
+Symbol::Expression::Expression(const std::string name, const double c)
+  : pExp_(Impl_::constructVARIABLE(name, c))
 {}
 
 Symbol::Expression::Expression(pExpression exp)
@@ -972,6 +1019,15 @@ Symbol::Expression Symbol::log (const double c) {
 
 Symbol::Expression Symbol::Expression::differentiate(const Expression& dx) {
   return Impl_::simplify(Impl_::differentiate(pExp_, dx.pExp_));
+}
+
+Symbol::Expression& Symbol::Expression::assign(double value) {
+  pExp_->assign(value);
+  return *this;
+}
+
+double Symbol::Expression::evaluate() const {
+  return pExp_->evaluate();
 }
 
 std::ostream& Symbol::operator <<(std::ostream& o, const Expression &e) {

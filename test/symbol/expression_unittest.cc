@@ -390,7 +390,6 @@ TEST(Expression, Log) {
   EXPECT_EQ(log(one ^ (-x)), zero);
 }
 
-
 TEST(Expression, Differentiate) {
   Symbol::Expression zero(0);
   Symbol::Expression one(1);
@@ -411,4 +410,34 @@ TEST(Expression, Differentiate) {
   EXPECT_EQ((x * y + y).differentiate(y), x + one);
 
   EXPECT_EQ((log(x)).differentiate(x), 1 / x);
+}
+
+TEST(Expression, Evaluate) {
+  Symbol::Expression zero(0);
+
+  EXPECT_EQ(zero.evaluate(), 0);
+
+  zero.assign(1);
+
+  EXPECT_NE(zero.evaluate(), 0);
+
+  zero.assign(-0);
+
+  EXPECT_EQ(zero.evaluate(), 0);
+
+  Symbol::Expression x("x", 3);
+  Symbol::Expression y("y", 10);
+
+  EXPECT_EQ(x.evaluate(), 3);
+  EXPECT_EQ(y.evaluate(), 10);
+
+  EXPECT_EQ((x + y).evaluate(), 13);
+
+  y.assign(5);
+
+  EXPECT_EQ((x + y).evaluate(), 8);
+
+  EXPECT_EQ((y - x).evaluate(), 2);
+
+  EXPECT_EQ((x - y).evaluate(), -2);
 }

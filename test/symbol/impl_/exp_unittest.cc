@@ -25,22 +25,25 @@ TEST(Impl_, MonomialConstruction) {
   EXPECT_EQ("3", three->id());
   EXPECT_EQ(0, three->operands_.size());
 
-  auto x = constructVARIABLE("x");
-  auto y = constructVARIABLE("y");
-  auto z = constructVARIABLE("z");
+  auto x = constructVARIABLE("x", 1);
+  auto y = constructVARIABLE("y", 2);
+  auto z = constructVARIABLE("z", 3);
 
   EXPECT_EQ("x", x->name_);
   EXPECT_EQ("x", x->id());
+  EXPECT_EQ(1, x->value_);
   EXPECT_EQ(Operator::VARIABLE, x->operator_);
   EXPECT_EQ(0, x->operands_.size());
 
   EXPECT_EQ("y", y->name_);
   EXPECT_EQ("y", y->id());
+  EXPECT_EQ(2, y->value_);
   EXPECT_EQ(Operator::VARIABLE, y->operator_);
   EXPECT_EQ(0, y->operands_.size());
 
   EXPECT_EQ("z", z->name_);
   EXPECT_EQ("z", z->id());
+  EXPECT_EQ(3, z->value_);
   EXPECT_EQ(Operator::VARIABLE, z->operator_);
   EXPECT_EQ(0, z->operands_.size());
 
@@ -53,9 +56,9 @@ TEST(Impl_, MonomialConstruction) {
 }
 
 TEST(Impl_, PolynomialConstruction) {
-  auto x = constructVARIABLE("x");
-  auto y = constructVARIABLE("y");
-  auto z = constructVARIABLE("z");
+  auto x = constructVARIABLE("x", 1);
+  auto y = constructVARIABLE("y", 2);
+  auto z = constructVARIABLE("z", 3);
 
   auto addition = constructADD({x, y, z});
 
