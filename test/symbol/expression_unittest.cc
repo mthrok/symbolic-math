@@ -374,5 +374,26 @@ TEST(Expression, MixedPower) {
 
   EXPECT_EQ((x ^ y) ^ two, "(x ^ (2 * y))");
   EXPECT_EQ((x ^ y) ^ two, x ^ (y + y));
+}
+
+TEST(Expression, Differentiate) {
+  Symbol::Expression zero(0);
+  Symbol::Expression one(1);
+
+  Symbol::Expression x("x");
+  Symbol::Expression y("y");
+  Symbol::Expression z("z");
+
+  EXPECT_EQ(x.differentiate(x), one);
+  EXPECT_EQ(x.differentiate(y), zero);
+  EXPECT_EQ((x + y).differentiate(y), one);
+  EXPECT_EQ((x - y).differentiate(y), -one);
+
+  EXPECT_EQ((x + x).differentiate(x), 2);
+  EXPECT_EQ((2 * x).differentiate(x), 2);
+  EXPECT_EQ((x * x).differentiate(x), 2 * x);
+
+  EXPECT_EQ((x * y + y).differentiate(y), x + one);
+
 
 }

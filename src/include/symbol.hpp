@@ -61,6 +61,8 @@ namespace Symbol {
     pExpression mergeMULTIPLY(pExpression pExp);
     pExpression mergePOWER(pExpression pExp);
 
+    pExpression differentiate(pExpression dy, Operand dx);
+
     Operands decompose2(Operand o);
     Operands decompose3(Operand o);
 
@@ -139,6 +141,8 @@ public:
   friend Operands decompose2(pExpression pExp);
   friend Operands decompose3(pExpression pExp);
 
+  friend pExpression differentiate(pExpression dy, Operand dx);
+
   friend Expression;
 };
 
@@ -149,6 +153,8 @@ class Symbol::Expression {
 public:
   Expression(double constant);
   Expression(std::string name);
+
+  Expression differentiate(const Expression &dx);
 
   friend bool operator == (const Expression &e1, const Expression &e2);
   friend bool operator == (const Expression &e, const std::string strExp);
@@ -650,6 +656,50 @@ pExpression Symbol::Impl_::simplify(pExpression pExp) {
   return pExp;
 }
 
+pExpression Symbol::Impl_::differentiate(pExpression dy, Operand dx) {
+  if (Operator::CONST == dx->operator_) {
+    LOG(FATAL) << "Cannot differentiate with CONST Expression.";
+  }
+  if ((dy - dx)->isZero()) {
+    return constructOne();
+  }
+  switch (dy->operator_) {
+  case Operator::CONST:
+  case Operator::VARIABLE:
+    return constructZero();
+  case Operator::NEGATE:
+    return constructNEGATE(differentiate(dy->operands_[0], dx));
+  case Operator::ADD: {
+    Operands operands;
+    for (auto& operand : dy->operands_) {
+      operands.push_back(differentiate(operand, dx));
+    }
+    return constructADD(operands);
+  }
+  case Operator::MULTIPLY: {
+    Operands operandsSet;
+    for (size_t i = 0; i < dy->operands_.size(); ++i) {
+      Operands operands;
+      for (size_t j = 0; j < dy->operands_.size(); ++j) {
+        if (i == j) {
+          operands.push_back(differentiate(dy->operands_[j], dx));
+        } else {
+          operands.push_back(dy->operands_[j]);
+        }
+      }
+      operandsSet.push_back(constructMULTIPLY(operands));
+    }
+    return constructADD(operandsSet);
+  }
+  case Operator::POWER: {
+  /*
+    We need LOG operator.!
+  */
+    return constructZero();
+  }
+  }
+}
+
 std::string Symbol::Impl_::Exp::id() const {
   switch(operator_) {
   case Operator::CONST: {
@@ -812,6 +862,10 @@ Symbol::Expression Symbol::operator ^ (const double c, const Expression& e) {
 
 Symbol::Expression Symbol::operator ^ (const Expression& e, const double c) {
   return e ^ Expression(c);
+}
+
+Symbol::Expression Symbol::Expression::differentiate(const Expression& dx) {
+  return Impl_::simplify(Impl_::differentiate(pExp_, dx.pExp_));
 }
 
 std::ostream& Symbol::operator <<(std::ostream& o, const Expression &e) {
