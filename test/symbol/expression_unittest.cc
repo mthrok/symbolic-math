@@ -104,6 +104,10 @@ TEST(Expression, ConstantAddition) {
   EXPECT_EQ(one + one, two + zero);
 
   EXPECT_EQ(one + one + zero, two + zero);
+
+  EXPECT_EQ((one + one) + zero, two);
+
+  EXPECT_EQ(one + (one + zero), two);
 }
 
 TEST(Expression, VariableAddition) {
@@ -118,6 +122,9 @@ TEST(Expression, VariableAddition) {
 
   EXPECT_NE(x + y, z + x);
   EXPECT_NE(z, x);
+
+  EXPECT_EQ((x + y) + x, x + (y + x));
+  EXPECT_EQ((x + y) + x, x + (x + y));
 }
 
 TEST(Expression, MixedAddition) {
@@ -208,13 +215,6 @@ TEST(Expression, MixedSubtraction) {
 
   EXPECT_EQ(zero, x - x);
   EXPECT_NE(zero, x - y);
-
-  EXPECT_NE(zero, x - 1.01 * x);
-
-  EXPECT_EQ(x, 2 * x - x);
-  EXPECT_EQ(x * 3, 2 * x + x);
-  EXPECT_EQ(x * 3 * y, y * (2 * x + x));
-  EXPECT_EQ(x * 3 * y - x * y, y * (2 * x + x) - x * y);
 }
 
 TEST(Expression, ConstantMultiplicatoin) {
@@ -242,14 +242,23 @@ TEST(Expression, ConstantMultiplicatoin) {
 }
 
 TEST(Expression, VariableMultiplicatoin) {
+  Symbol::Expression zero(0);
   Symbol::Expression x("x");
   Symbol::Expression y("y");
   Symbol::Expression z("z");
 
   EXPECT_EQ(x * x, x * x);
   EXPECT_EQ(x * y, y * x);
+  EXPECT_EQ((x * y) * z, x * (y * z));
   EXPECT_EQ(x * y * z, z * y * x);
   EXPECT_EQ(x * x * y * z, z * y * x * x);
+
+  EXPECT_NE(zero, x - 1.01 * x);
+
+  EXPECT_EQ(x, 2 * x - x);
+  EXPECT_EQ(x * 3, 2 * x + x);
+  EXPECT_EQ(x * 3 * y, y * (2 * x + x));
+  EXPECT_EQ(x * 3 * y - x * y, y * (2 * x + x) - x * y);
 
   EXPECT_EQ(-x * y * z, -(z * y * x));
   EXPECT_EQ(-3 * x * y * z, -(3 * z * y * x));
@@ -264,6 +273,7 @@ TEST(Expression, VariableMultiplicatoin) {
   EXPECT_EQ(-3 * (x * x - z * z), 3 * (x * -x) + z * 3 * z);
 
   EXPECT_EQ(-3 * ((x + z) * (x - z)), 3 * (x * -x) + z * 3 * z);
+
 }
 
 TEST(Expression, ConstantPower) {
@@ -337,23 +347,32 @@ TEST(Expression, VariablePower) {
   EXPECT_EQ(x ^ (x - x), 1);
 
   EXPECT_EQ((x ^ y) * (z ^ y), (x * z) ^ y);
+
+  EXPECT_EQ(x ^ (y + z), (x ^ y)* (x ^ z));
 }
 
 TEST(Expression, MixedPower) {
   Symbol::Expression zero(0);
   Symbol::Expression one(1);
   Symbol::Expression two(2);
+  Symbol::Expression three(3);
+  Symbol::Expression six(6);
 
   Symbol::Expression x("x");
   Symbol::Expression y("y");
 
-  EXPECT_EQ(x ^ 0, one);
-  EXPECT_EQ(x ^ 1, x);
-  EXPECT_EQ(x ^ 2, x * x);
-  EXPECT_EQ(x ^ 3, x * x * x);
-  EXPECT_EQ(x ^ 4, x * x * x * x);
+  EXPECT_EQ(x ^ zero, one);
+  EXPECT_EQ(x ^ one, x);
+  EXPECT_EQ(x ^ two, x * x);
+  EXPECT_EQ(x ^ three, x * x * x);
 
-  EXPECT_EQ(x ^ (y), x ^ (2 * y - y));
-
+  EXPECT_EQ(x ^ y, x ^ (2 * y - y));
   EXPECT_EQ((x ^ 2) * (4 * x), x * ((2 * x) ^ 2));
+
+  EXPECT_EQ(x ^ x ^ x ^ x, "(((x ^ x) ^ x) ^ x)");
+  EXPECT_EQ((((x ^ one) ^ two) ^ three), x ^ six);
+
+  EXPECT_EQ((x ^ y) ^ two, "(x ^ (2 * y))");
+  EXPECT_EQ((x ^ y) ^ two, x ^ (y + y));
+
 }
