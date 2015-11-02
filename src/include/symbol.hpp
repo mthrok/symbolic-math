@@ -45,6 +45,7 @@ namespace Symbol {
     pExpression constructADD(const Operands ops);
     pExpression constructMULTIPLY(const Operands ops);
     pExpression constructPOWER(const Operands ops);
+    pExpression constructInverse(const Operand o);
     pExpression constructLOG(const Operand o);
 
     pExpression simplify(pExpression pExp);
@@ -74,6 +75,7 @@ namespace Symbol {
     pExpression operator - (const Operand o1, const Operand o2);
     pExpression operator * (const Operand o1, const Operand o2);
     pExpression operator ^ (const Operand o1, const Operand o2);
+    pExpression operator / (const Operand o1, const Operand o2);
     pExpression log (const Operand o);
   };
 
@@ -96,6 +98,9 @@ namespace Symbol {
   Expression operator ^ (const Expression &e1, const Expression &e2);
   Expression operator ^ (const Expression &e, const double c);
   Expression operator ^ (const double c, const Expression &e);
+  Expression operator / (const Expression &e1, const Expression &e2);
+  Expression operator / (const Expression &e, const double c);
+  Expression operator / (const double c, const Expression &e);
   Expression log (const Expression &o);
   Expression log (const double o);
 
@@ -172,6 +177,7 @@ public:
   friend Expression operator + (const Expression &e1, const Expression &e2);
   friend Expression operator * (const Expression &e1, const Expression &e2);
   friend Expression operator ^ (const Expression &e1, const Expression &e2);
+  friend Expression operator / (const Expression &e1, const Expression &e2);
   friend Expression log (const Expression &e);
 
   friend std::ostream& operator << (std::ostream& o, const Expression &e);
@@ -314,6 +320,10 @@ pExpression Symbol::Impl_::constructMULTIPLY(const Operands ops) {
 
 pExpression Symbol::Impl_::constructPOWER(const Operands ops) {
   return MAKE_SHARED_EXP("power", Operator::POWER, ops, 0);
+}
+
+pExpression Symbol::Impl_::constructInverse(const Operand o) {
+  return constructPOWER({o, constructCONST(-1)});
 }
 
 pExpression Symbol::Impl_::constructLOG(const Operand v) {
@@ -718,35 +728,35 @@ pExpression Symbol::Impl_::simplify(pExpression pExp) {
   return pExp;
 }
 
-pExpression Symbol::Impl_::differentiate(pExpression dy, Operand dx) {
-  if (Operator::CONST == dx->operator_) {
+pExpression Symbol::Impl_::differentiate(pExpression y, Operand x) {
+  if (Operator::CONST == x->operator_) {
     LOG(FATAL) << "Cannot differentiate with CONST Expression.";
   }
-  if ((dy - dx)->isZero()) {
+  if ((y - x)->isZero()) {
     return constructOne();
   }
-  switch (dy->operator_) {
+  switch (y->operator_) {
   case Operator::CONST:
   case Operator::VARIABLE:
     return constructZero();
   case Operator::NEGATE:
-    return constructNEGATE(differentiate(dy->operands_[0], dx));
+    return constructNEGATE(differentiate(y->operands_[0], x));
   case Operator::ADD: {
     Operands operands;
-    for (auto& operand : dy->operands_) {
-      operands.push_back(differentiate(operand, dx));
+    for (auto& operand : y->operands_) {
+      operands.push_back(differentiate(operand, x));
     }
     return constructADD(operands);
   }
   case Operator::MULTIPLY: {
     Operands operandsSet;
-    for (size_t i = 0; i < dy->operands_.size(); ++i) {
+    for (size_t i = 0; i < y->operands_.size(); ++i) {
       Operands operands;
-      for (size_t j = 0; j < dy->operands_.size(); ++j) {
+      for (size_t j = 0; j < y->operands_.size(); ++j) {
         if (i == j) {
-          operands.push_back(differentiate(dy->operands_[j], dx));
+          operands.push_back(differentiate(y->operands_[j], x));
         } else {
-          operands.push_back(dy->operands_[j]);
+          operands.push_back(y->operands_[j]);
         }
       }
       operandsSet.push_back(constructMULTIPLY(operands));
@@ -754,14 +764,16 @@ pExpression Symbol::Impl_::differentiate(pExpression dy, Operand dx) {
     return constructADD(operandsSet);
   }
   case Operator::POWER: {
-  /*
-    We need LOG operator.!
-  */
-    return constructZero();
+    auto f = y->operands_[0];
+    auto g = y->operands_[1];
+    auto fp = differentiate(f, x);
+    auto gp = differentiate(g, x);
+    return (f ^ g) * (fp * g / f + gp * log(f));
   }
   case Operator::LOG: {
-    // TODO
-    return constructZero();
+    auto f = y->operands_[0];
+    auto fp = differentiate(f, x);
+    return fp / f;
   }
   }
 }
@@ -839,6 +851,10 @@ pExpression Symbol::Impl_::operator * (const Operand o1, const Operand o2) {
 
 pExpression Symbol::Impl_::operator ^ (const Operand o1, const Operand o2) {
   return simplify(constructPOWER({o1, o2}));
+}
+
+pExpression Symbol::Impl_::operator / (const Operand o1, const Operand o2) {
+  return simplify(constructMULTIPLY({o1, constructInverse(o2)}));
 }
 
 pExpression Symbol::Impl_::log (const Operand o) {
@@ -932,6 +948,18 @@ Symbol::Expression Symbol::operator ^ (const double c, const Expression& e) {
 
 Symbol::Expression Symbol::operator ^ (const Expression& e, const double c) {
   return e ^ Expression(c);
+}
+
+Symbol::Expression Symbol::operator / (const Expression& e1, const Expression& e2) {
+  return e1.pExp_ / e2.pExp_;
+}
+
+Symbol::Expression Symbol::operator / (const double c, const Expression& e) {
+  return Expression(c) / e;
+}
+
+Symbol::Expression Symbol::operator / (const Expression& e, const double c) {
+  return e / Expression(c);
 }
 
 Symbol::Expression Symbol::log (const Expression& e) {

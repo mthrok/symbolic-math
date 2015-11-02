@@ -410,5 +410,5 @@ TEST(Expression, Differentiate) {
 
   EXPECT_EQ((x * y + y).differentiate(y), x + one);
 
-
+  EXPECT_EQ((log(x)).differentiate(x), 1 / x);
 }
