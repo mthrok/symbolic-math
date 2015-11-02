@@ -45,6 +45,7 @@ namespace Symbol {
     pExpression constructADD(const Operands ops);
     pExpression constructMULTIPLY(const Operands ops);
     pExpression constructPOWER(const Operands ops);
+    pExpression constructLOG(const Operand o);
 
     pExpression simplify(pExpression pExp);
     pExpression flatten(pExpression pExp);
@@ -56,10 +57,12 @@ namespace Symbol {
     pExpression expandNEGATE(pExpression pExp);
     pExpression expandMULTIPLY(pExpression pExp);
     pExpression expandPOWER(pExpression pExp);
+    pExpression expandLOG(pExpression pExp);
     pExpression merge(pExpression pExp);
     pExpression mergeADD(pExpression pExp);
     pExpression mergeMULTIPLY(pExpression pExp);
     pExpression mergePOWER(pExpression pExp);
+    pExpression mergeLOG(pExpression pExp);
 
     pExpression differentiate(pExpression dy, Operand dx);
 
@@ -71,6 +74,7 @@ namespace Symbol {
     pExpression operator - (const Operand o1, const Operand o2);
     pExpression operator * (const Operand o1, const Operand o2);
     pExpression operator ^ (const Operand o1, const Operand o2);
+    pExpression log (const Operand o);
   };
 
   bool operator == (const Expression &e1, const Expression &e2);
@@ -92,13 +96,15 @@ namespace Symbol {
   Expression operator ^ (const Expression &e1, const Expression &e2);
   Expression operator ^ (const Expression &e, const double c);
   Expression operator ^ (const double c, const Expression &e);
+  Expression log (const Expression &o);
+  Expression log (const double o);
 
   std::ostream& operator << (std::ostream& o, const Expression &e);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 enum class Symbol::Impl_::Operator {
-  CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER
+  CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
 };
 
 class Symbol::Impl_::Exp {
@@ -133,10 +139,12 @@ public:
   friend pExpression expandNEGATE(pExpression pExp);
   friend pExpression expandMULTIPLY(pExpression pExp);
   friend pExpression expandPOWER(pExpression pExp);
+  friend pExpression expandLOG(pExpression pExp);
   friend pExpression merge(pExpression pExp);
   friend pExpression mergeADD(pExpression pExp);
   friend pExpression mergeMULTIPLY(pExpression pExp);
   friend pExpression mergePOWER(pExpression pExp);
+  friend pExpression mergeLOG(pExpression pExp);
 
   friend Operands decompose2(pExpression pExp);
   friend Operands decompose3(pExpression pExp);
@@ -164,6 +172,7 @@ public:
   friend Expression operator + (const Expression &e1, const Expression &e2);
   friend Expression operator * (const Expression &e1, const Expression &e2);
   friend Expression operator ^ (const Expression &e1, const Expression &e2);
+  friend Expression log (const Expression &e);
 
   friend std::ostream& operator << (std::ostream& o, const Expression &e);
 };
@@ -199,6 +208,11 @@ Symbol::Impl_::Exp::Exp(std::string name,
 }
 
 void Symbol::Impl_::Exp::assertOperationConsistency() const {
+  for (auto& operand : operands_) {
+    if (!operand) {
+      LOG(FATAL) << "NULL operand was given.";
+    }
+  }
   auto nOperands = operands_.size();
   switch(operator_) {
   case Operator::CONST:
@@ -213,7 +227,7 @@ void Symbol::Impl_::Exp::assertOperationConsistency() const {
    break;
   case Operator::NEGATE:
     if (nOperands != 1) {
-      LOG(FATAL) << "NEGATE Expression must have only one operand.";
+      LOG(FATAL) << "NEGATE Expression must have exactly one operand.";
     }
     break;
   case Operator::POWER:
@@ -231,11 +245,16 @@ void Symbol::Impl_::Exp::assertOperationConsistency() const {
       LOG(FATAL) << "MULTIPLY Expression must have at least two operands.";
     }
     break;
-  }
-  for (auto& operand : operands_) {
-    if (!operand) {
-      LOG(FATAL) << "NULL operand was given.";
+  case Operator::LOG:
+    if (nOperands != 1) {
+      LOG(FATAL) << "LOG Expression must have only exactly operand.";
     }
+    if (Operator::CONST == operator_) {
+      if (operands_[0]->isZero() || operands_[0]->value_ <= 0) {
+        LOG(FATAL) << "Operand of LOG Expression must greater than zero.";
+      }
+    }
+    break;
   }
 };
 
@@ -295,6 +314,10 @@ pExpression Symbol::Impl_::constructMULTIPLY(const Operands ops) {
 
 pExpression Symbol::Impl_::constructPOWER(const Operands ops) {
   return MAKE_SHARED_EXP("power", Operator::POWER, ops, 0);
+}
+
+pExpression Symbol::Impl_::constructLOG(const Operand v) {
+  return MAKE_SHARED_EXP("log", Operator::LOG, Operands {v}, 0);
 }
 
 pExpression Symbol::Impl_::flatten(const pExpression pExp) {
@@ -362,6 +385,8 @@ pExpression Symbol::Impl_::expand(pExpression pExp) {
     return expandMULTIPLY(pExp);
   case Operator::POWER:
     return expandPOWER(pExp);
+  case Operator::LOG:
+    return expandLOG(pExp);
   default:
     return pExp;
   }
@@ -455,7 +480,27 @@ pExpression Symbol::Impl_::expandPOWER(pExpression pExp) {
   return pExp;
 }
 
-pExpression Symbol::Impl_::merge(const pExpression pExp) {
+/// log(X * Y) -> log(X) + log(Y)
+/// log(X ^ Y) -> Y * log(X)
+pExpression Symbol::Impl_::expandLOG(pExpression pExp) {
+  auto innerOperand = pExp->operands_[0];
+  switch(innerOperand->operator_) {
+  case Operator::MULTIPLY: {
+    Operands operands;
+    for (auto& operand : innerOperand->operands_) {
+      operands.push_back(constructLOG(operand));
+    }
+    return constructADD(operands);
+  }
+  case Operator::POWER:
+    return constructMULTIPLY({innerOperand->operands_[1],
+          constructLOG(innerOperand->operands_[0])});
+  default:
+    return pExp;
+  }
+}
+
+pExpression Symbol::Impl_::merge(pExpression pExp) {
   switch(pExp->operator_) {
   case Operator::ADD:
     return mergeADD(pExp);
@@ -463,6 +508,8 @@ pExpression Symbol::Impl_::merge(const pExpression pExp) {
     return mergeMULTIPLY(pExp);
   case Operator::POWER:
     return mergePOWER(pExp);
+  case Operator::LOG:
+    return mergeLOG(pExp);
   default:
     return pExp;
   }
@@ -550,6 +597,7 @@ pExpression Symbol::Impl_::mergeMULTIPLY(pExpression pExp) {
 /// Merger POWER expression
 /// ex)
 ///   C1 ^ C2 -> C3
+///   1 ^ X -> 1
 ///   X ^ 0 -> 1
 ///   X ^ 1 -> X
 pExpression Symbol::Impl_::mergePOWER(pExpression pExp) {
@@ -562,13 +610,25 @@ pExpression Symbol::Impl_::mergePOWER(pExpression pExp) {
       Operator::CONST == expo->operator_) {
     return constructCONST(std::pow(base->value_, expo->value_));
   }
-  if (expo->isZero()) {
+  if (base->isOne() || expo->isZero()) {
     return constructOne();
   }
   if (expo->isOne()) {
     return base;
   }
   return pExp;
+}
+
+/// log(1) -> 0
+pExpression Symbol::Impl_::mergeLOG(pExpression pExp) {
+  if (Operator::LOG != pExp->operator_) {
+    LOG(FATAL) << "mergeLOG called on non-LOG Expression.";
+  }
+  if (pExp->operands_[0]->isOne()) {
+    return constructZero();
+  } else {
+    return pExp;
+  }
 }
 
 /// Decompose an Expression into coefficient and non-coefficient part
@@ -582,6 +642,7 @@ Operands Symbol::Impl_::decompose2(Operand o) {
   case Operator::ADD:
   case Operator::POWER:
   case Operator::VARIABLE:
+  case Operator::LOG:
     return {constructOne(), o};
   case Operator::NEGATE: {
     Operands ret = decompose2(o->operands_[0]);
@@ -612,6 +673,7 @@ Operands Symbol::Impl_::decompose3(Operand o) {
   case Operator::CONST:
     return {o, constructZero(), constructZero()};
   case Operator::VARIABLE:
+  case Operator::LOG:
     return {constructOne(), o, constructOne()};
   case Operator::NEGATE: {
     Operands ret = decompose3(o->operands_[0]);
@@ -697,6 +759,10 @@ pExpression Symbol::Impl_::differentiate(pExpression dy, Operand dx) {
   */
     return constructZero();
   }
+  case Operator::LOG: {
+    // TODO
+    return constructZero();
+  }
   }
 }
 
@@ -722,36 +788,36 @@ std::string Symbol::Impl_::Exp::id() const {
     return name_;
   case Operator::NEGATE:
     return " - " + operands_[0]->id();
-  case Operator::ADD:
-    {
-      std::string ret;
-      for (auto& operand : operands_) {
-        auto append = operand->id();
-	if (0 != ret.size()) {
-          if (append.compare(0, 3, " - ")) {
-            ret += " + ";
-          }
-	}
-	ret += append;
+  case Operator::ADD: {
+    std::string ret;
+    for (auto& operand : operands_) {
+      auto append = operand->id();
+      if (0 != ret.size()) {
+        if (append.compare(0, 3, " - ")) {
+          ret += " + ";
+        }
       }
-      return "(" + ret + ")";
-    }
-  case Operator::MULTIPLY:
-    {
-      std::string ret;
-      for (auto& operand : operands_) {
-        auto append = operand->id();
-	if (0 != ret.size()) {
-          ret += " * ";
-	}
 	ret += append;
+    }
+    return "(" + ret + ")";
+  }
+  case Operator::MULTIPLY: {
+    std::string ret;
+    for (auto& operand : operands_) {
+      auto append = operand->id();
+      if (0 != ret.size()) {
+        ret += " * ";
       }
-      return "(" + ret + ")";
+      ret += append;
     }
-  case Operator::POWER:
-    {
-      return "(" + operands_[0]->id() + " ^ " + operands_[1]->id() + ")";
-    }
+    return "(" + ret + ")";
+  }
+  case Operator::POWER: {
+    return "(" + operands_[0]->id() + " ^ " + operands_[1]->id() + ")";
+  }
+  case Operator::LOG: {
+    return "log(" + operands_[0]->id() + ")";
+  }
   }
 }
 
@@ -773,6 +839,10 @@ pExpression Symbol::Impl_::operator * (const Operand o1, const Operand o2) {
 
 pExpression Symbol::Impl_::operator ^ (const Operand o1, const Operand o2) {
   return simplify(constructPOWER({o1, o2}));
+}
+
+pExpression Symbol::Impl_::log (const Operand o) {
+  return simplify(constructLOG(o));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -862,6 +932,14 @@ Symbol::Expression Symbol::operator ^ (const double c, const Expression& e) {
 
 Symbol::Expression Symbol::operator ^ (const Expression& e, const double c) {
   return e ^ Expression(c);
+}
+
+Symbol::Expression Symbol::log (const Expression& e) {
+  return Impl_::log(e.pExp_);
+}
+
+Symbol::Expression Symbol::log (const double c) {
+  return log(Expression(c));
 }
 
 Symbol::Expression Symbol::Expression::differentiate(const Expression& dx) {

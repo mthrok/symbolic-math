@@ -376,6 +376,21 @@ TEST(Expression, MixedPower) {
   EXPECT_EQ((x ^ y) ^ two, x ^ (y + y));
 }
 
+TEST(Expression, Log) {
+  Symbol::Expression zero(0);
+  Symbol::Expression one(1);
+  Symbol::Expression x("x");
+  Symbol::Expression y("y");
+  Symbol::Expression z("z");
+
+  EXPECT_EQ(log(one), zero);
+  EXPECT_EQ(log(x * y), log(x) + log(y));
+  EXPECT_EQ(log(x ^ y), log(x) * y);
+  EXPECT_EQ(log(x ^ (-one)), -log(x));
+  EXPECT_EQ(log(one ^ (-x)), zero);
+}
+
+
 TEST(Expression, Differentiate) {
   Symbol::Expression zero(0);
   Symbol::Expression one(1);
