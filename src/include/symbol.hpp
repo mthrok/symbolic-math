@@ -220,53 +220,50 @@ Symbol::Impl_::Exp::Exp(std::string name,
 }
 
 void Symbol::Impl_::Exp::assertOperationConsistency() const {
+  std::string error_message;
   for (auto& operand : operands_) {
-    if (!operand) {
-      LOG(FATAL) << "NULL operand was given.";
-    }
+    if (!operand)
+      error_message = "NULL operand was given.";
   }
   auto nOperands = operands_.size();
   switch(operator_) {
   case Operator::CONST:
-   if (nOperands) {
-     LOG(FATAL) << "CONST Expression must not have operand.";
-   }
+   if (nOperands)
+     error_message = "CONST Expression must not have operand.";
    break;
   case Operator::VARIABLE:
-   if (nOperands) {
-     LOG(FATAL) << "VARIABLE Expression must not have operand.";
-   }
+   if (nOperands)
+     error_message = "VARIABLE Expression must not have operand.";
    break;
   case Operator::NEGATE:
-    if (nOperands != 1) {
-      LOG(FATAL) << "NEGATE Expression must have exactly one operand.";
-    }
+    if (nOperands != 1)
+      error_message = "NEGATE Expression must have exactly one operand.";
     break;
   case Operator::POWER:
-    if (nOperands != 2) {
-      LOG(FATAL) << "POWER Expression must have two operands.";
-    }
+    if (nOperands != 2)
+      error_message = "POWER Expression must have two operands.";
     break;
   case Operator::ADD:
-    if (nOperands < 2) {
-      LOG(FATAL) << "ADD Expression must have at least two operands.";
-    }
+    if (nOperands < 2)
+      error_message = "ADD Expression must have at least two operands.";
     break;
   case Operator::MULTIPLY:
-    if (nOperands < 2) {
-      LOG(FATAL) << "MULTIPLY Expression must have at least two operands.";
-    }
+    if (nOperands < 2)
+      error_message = "MULTIPLY Expression must have at least two operands.";
     break;
   case Operator::LOG:
-    if (nOperands != 1) {
-      LOG(FATAL) << "LOG Expression must have only exactly operand.";
-    }
-    if (Operator::CONST == operator_) {
+    if (nOperands != 1)
+      error_message = "LOG Expression must have only exactly operand.";
+    if (Operator::CONST == operands_[0]->operator_) {
       if (operands_[0]->isZero() || operands_[0]->value_ <= 0) {
-        LOG(FATAL) << "Operand of LOG Expression must greater than zero.";
+        error_message = "Operand of LOG Expression must greater than zero.";
       }
     }
     break;
+  }
+  if (!error_message.empty()) {
+    LOG(ERROR) << error_message;
+    throw std::runtime_error(error_message);
   }
 };
 
@@ -352,7 +349,9 @@ pExpression Symbol::Impl_::flatten(const pExpression pExp) {
 /// -C1 -> C2
 pExpression Symbol::Impl_::flattenNEGATE(pExpression pExp) {
   if (Operator::NEGATE != pExp->operator_) {
-    LOG(FATAL) << "flattenNEGATE called on non-NEGATE expression.";
+    auto msg = "flattenNEGATE called on non-NEGATE expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   Operand innerOperand = pExp->operands_[0];
   switch (innerOperand->operator_) {
@@ -370,8 +369,10 @@ pExpression Symbol::Impl_::flattenNEGATE(pExpression pExp) {
 pExpression Symbol::Impl_::flattenMultiOperands(pExpression pExp) {
   if (Operator::ADD != pExp->operator_ &&
       Operator::MULTIPLY != pExp->operator_) {
-    LOG(FATAL) << "flattenMultiOperands must be called on "
-               << "ADD or MULTIPLY Expression.";
+    auto msg = "flattenMultiOperands must be called on ADD or MULTIPLY Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
+
   }
   Operands newOperands;
   for (auto& operand_ : pExp->operands_) {
@@ -411,7 +412,9 @@ pExpression Symbol::Impl_::expand(pExpression pExp) {
 /// -(X + Y + Z) -> -X -Y -Z
 pExpression Symbol::Impl_::expandNEGATE(pExpression pExp) {
   if (Operator::NEGATE != pExp->operator_) {
-    LOG(FATAL) << "expandNEGATE was called on non-NEGATE Expression.";
+    auto msg = "expandNEGATE was called on non-NEGATE Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   Operand innerOperand = pExp->operands_[0];
   switch(innerOperand->operator_) {
@@ -432,7 +435,9 @@ pExpression Symbol::Impl_::expandNEGATE(pExpression pExp) {
 /// (X + Y) * (A + B)  -> X*A + X*B + Y*A + Y*B
 pExpression Symbol::Impl_::expandMULTIPLY(pExpression pExp) {
   if (Operator::MULTIPLY != pExp->operator_) {
-    LOG(FATAL) << "expandMULTIPLY was called on non-MULTIPLY Expression.";
+    auto msg = "expandMULTIPLY was called on non-MULTIPLY Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   // Classify operands to ADD type and non-ADD type.
   Operands nonAddOperands;
@@ -471,7 +476,9 @@ pExpression Symbol::Impl_::expandMULTIPLY(pExpression pExp) {
 /// (X * Y) ^ A -> (X ^ A) * (Y ^ A)
 pExpression Symbol::Impl_::expandPOWER(pExpression pExp) {
   if (Operator::POWER != pExp->operator_) {
-    LOG(FATAL) << "expandPOWER was called on non-POWER Expression.";
+    auto msg = "expandPOWER was called on non-POWER Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   auto base = pExp->operands_[0];
   auto expo = pExp->operands_[1];
@@ -535,7 +542,9 @@ pExpression Symbol::Impl_::merge(pExpression pExp) {
 /// ex) C1 + X + X + Y + C2 -> (2 * X) + Y + (C1 + C2)
 pExpression Symbol::Impl_::mergeADD(pExpression pExp) {
   if (Operator::ADD != pExp->operator_) {
-    LOG(FATAL) << "mergeADD was called ont non ADD Expression.";
+    auto msg = "mergeADD was called ont non ADD Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   std::map<pExpression, double, defaultCompare> operandCounts;
   // Classify operands to coefficient and non-coefficient parts
@@ -569,7 +578,9 @@ pExpression Symbol::Impl_::mergeADD(pExpression pExp) {
 /// ex) C1 * X * Y * X * C2 -> (C1 * C2) * (X ^ 2) * Y
 pExpression Symbol::Impl_::mergeMULTIPLY(pExpression pExp) {
   if (Operator::MULTIPLY != pExp->operator_) {
-    LOG(FATAL) << "mergeMULTIPLY was called on non-MULTIPLY Expression.";
+    auto msg = "mergeMULTIPLY was called on non-MULTIPLY Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   auto constOperand = constructOne();
   std::map<pExpression, pExpression, defaultCompare> nonConstOperands;
@@ -618,7 +629,9 @@ pExpression Symbol::Impl_::mergeMULTIPLY(pExpression pExp) {
 ///   X ^ 1 -> X
 pExpression Symbol::Impl_::mergePOWER(pExpression pExp) {
   if (Operator::POWER != pExp->operator_) {
-    LOG(FATAL) << "mergePOWER called on non-POWER Expression.";
+    auto msg = "mergePOWER called on non-POWER Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   auto base = pExp->operands_[0];
   auto expo = pExp->operands_[1];
@@ -638,7 +651,9 @@ pExpression Symbol::Impl_::mergePOWER(pExpression pExp) {
 /// log(1) -> 0
 pExpression Symbol::Impl_::mergeLOG(pExpression pExp) {
   if (Operator::LOG != pExp->operator_) {
-    LOG(FATAL) << "mergeLOG called on non-LOG Expression.";
+    auto msg = "mergeLOG called on non-LOG Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   if (pExp->operands_[0]->isOne()) {
     return constructZero();
@@ -736,7 +751,9 @@ pExpression Symbol::Impl_::simplify(pExpression pExp) {
 
 pExpression Symbol::Impl_::differentiate(pExpression y, Operand x) {
   if (Operator::CONST == x->operator_) {
-    LOG(FATAL) << "Cannot differentiate with CONST Expression.";
+    auto msg = "Cannot differentiate with CONST Expression.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
   if ((y - x)->isZero()) {
     return constructOne();
@@ -830,12 +847,10 @@ std::string Symbol::Impl_::Exp::id() const {
     }
     return "(" + ret + ")";
   }
-  case Operator::POWER: {
+  case Operator::POWER:
     return "(" + operands_[0]->id() + " ^ " + operands_[1]->id() + ")";
-  }
-  case Operator::LOG: {
+  case Operator::LOG:
     return "log(" + operands_[0]->id() + ")";
-  }
   }
 }
 
@@ -844,9 +859,11 @@ void Symbol::Impl_::Exp::assign(double value) {
   case Operator::CONST:
   case Operator::VARIABLE:
     value_ = value;
-    return;
+    break;
   default:
-    LOG(FATAL) << "Cannot assign value to compound expressions.";
+    auto msg = "Cannot assign value to compound expressions.";
+    LOG(ERROR) << msg;
+    throw std::runtime_error(msg);
   }
 }
 
