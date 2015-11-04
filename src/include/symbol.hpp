@@ -10,6 +10,10 @@
 
 #include "easylogging++.h"
 
+#define LOG_AND_THROW(MSG)  \
+  LOG(ERROR) << MSG; throw std::runtime_error(MSG)
+
+
 ////////////////////////////////////////////////////////////////////////////////
 #include <cmath>
 inline bool isNearlyEqual(double x, double y, const double epsilon = 1e-5) {
@@ -29,6 +33,8 @@ namespace Symbol {
     enum class Operator;
 
     class Exp;
+
+    class Data;
   };
 
   class Expression;
@@ -36,6 +42,7 @@ namespace Symbol {
   typedef std::shared_ptr<Symbol::Impl_::Exp> Operand;
   typedef std::shared_ptr<Symbol::Impl_::Exp> pExp;
   typedef std::vector<Operand> Operands;
+  typedef std::vector<unsigned int> Shape;
 };
 
 #define MAKE_SHARED_EXP std::make_shared<Symbol::Impl_::Exp>
@@ -87,6 +94,8 @@ namespace Symbol {
     pExp operator ^ (const Operand o1, const Operand o2);
     pExp operator / (const Operand o1, const Operand o2);
     pExp log (const Operand o);
+
+    std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
   };
 
   bool operator == (const Expression &e1, const Expression &e2);
@@ -124,6 +133,20 @@ enum class Symbol::Impl_::Operator {
   CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
 };
 
+class Symbol::Impl_::Data {
+  Shape shape_;
+  std::shared_ptr<double> pData_;
+public:
+  // Scalar Initialization
+  Data(double v);
+  // Non-scalar Initialization
+  Data(Shape s, double v);
+
+  size_t size() const;
+
+  friend std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
+};
+
 class Symbol::Impl_::Exp {
 #ifdef TEST_IMPL_
 public:
@@ -135,7 +158,7 @@ public:
 
 public:
   // Constant constructor
-  Exp(double val);
+  Exp(double value);
 
   // Variable constructor
   Exp(std::string name);
@@ -145,6 +168,7 @@ public:
   Exp(Operator oprtr, Operands oprnds);
 
   void assertOperationConsistency() const;
+
   bool isConst() const;
   bool isNegative() const;
   bool isPositive() const;
@@ -185,7 +209,6 @@ public:
 class Symbol::Expression {
   pExp pExp_;
   Expression(pExp e);
-
 public:
   Expression(double constant);
   Expression(const std::string name, const double c = NAN);
@@ -223,7 +246,37 @@ struct Symbol::Impl_::compareOperands {
   }
 };
 
-////////////////////////////////////////////////////////////////////////////////
+Symbol::Impl_::Data::Data(double value)
+  : shape_({1})
+  , pData_(std::make_shared<double>(value))
+{}
+
+Symbol::Impl_::Data::Data(Shape shape, double value)
+  : shape_(shape)
+  , pData_(new double[size()], [](double* p){delete[] p;})
+{
+  double* pData = pData_.get();
+  for(size_t i = 0; i < size(); ++i) {
+    pData[i] = value;
+  }
+}
+
+size_t Symbol::Impl_::Data::size() const {
+  size_t numel = 1;
+  for (auto& s : shape_) {
+    numel *= s;
+  }
+  return numel;
+}
+
+std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
+  double* pData = d.pData_.get();
+  for(size_t i = 0; i < d.size(); ++i) {
+    o << pData[i] << ", ";
+  }
+  return o;
+}
+
 Symbol::Impl_::Exp::Exp(double value)
   : name_()
   , pVal_(std::make_shared<double>(value))
@@ -315,8 +368,7 @@ void Symbol::Impl_::Exp::assertOperationConsistency() const {
     break;
   }
   if (!error_message.empty()) {
-    LOG(ERROR) << error_message;
-    throw std::runtime_error(error_message);
+    LOG_AND_THROW(error_message);
   }
 };
 
@@ -420,9 +472,7 @@ Symbol::pExp Symbol::Impl_::flatten(const pExp e) {
 /// -C1 -> C2
 Symbol::pExp Symbol::Impl_::flattenNEGATE(pExp e) {
   if (Operator::NEGATE != e->operator_) {
-    auto msg = "flattenNEGATE called on non-NEGATE expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("flattenNEGATE called on non-NEGATE expression.");
   }
   Operand innerOperand = e->operands_[0];
   switch (innerOperand->operator_) {
@@ -440,9 +490,7 @@ Symbol::pExp Symbol::Impl_::flattenNEGATE(pExp e) {
 Symbol::pExp Symbol::Impl_::flattenMultiOperands(pExp e) {
   if (Operator::ADD != e->operator_ &&
       Operator::MULTIPLY != e->operator_) {
-    auto msg = "flattenMultiOperands must be called on ADD or MULTIPLY Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("flattenMultiOperands must be called on ADD or MULTIPLY Expression.");
   }
   Operands newOperands;
   for (auto& operand_ : e->operands_) {
@@ -482,9 +530,7 @@ Symbol::pExp Symbol::Impl_::expand(pExp e) {
 /// -(X + Y + Z) -> -X -Y -Z
 Symbol::pExp Symbol::Impl_::expandNEGATE(pExp e) {
   if (Operator::NEGATE != e->operator_) {
-    auto msg = "expandNEGATE was called on non-NEGATE Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("expandNEGATE was called on non-NEGATE Expression.");
   }
   auto innerOperand = e->operands_[0];
   auto innerOperator = innerOperand->operator_;
@@ -504,9 +550,7 @@ Symbol::pExp Symbol::Impl_::expandNEGATE(pExp e) {
 /// (X + Y) * (A + B)  -> X*A + X*B + Y*A + Y*B
 Symbol::pExp Symbol::Impl_::expandMULTIPLY(pExp e) {
   if (Operator::MULTIPLY != e->operator_) {
-    auto msg = "expandMULTIPLY was called on non-MULTIPLY Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("expandMULTIPLY was called on non-MULTIPLY Expression.");
   }
   // Classify operands to ADD type and non-ADD type.
   Operands nonAddOperands;
@@ -545,9 +589,7 @@ Symbol::pExp Symbol::Impl_::expandMULTIPLY(pExp e) {
 /// (X * Y) ^ A -> (X ^ A) * (Y ^ A)
 Symbol::pExp Symbol::Impl_::expandPOWER(pExp e) {
   if (Operator::POWER != e->operator_) {
-    auto msg = "expandPOWER was called on non-POWER Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("expandPOWER was called on non-POWER Expression.");
   }
   auto base = e->operands_[0];
   auto expo = e->operands_[1];
@@ -612,9 +654,7 @@ Symbol::pExp Symbol::Impl_::merge(pExp e) {
 /// ex) C1 + X + X + Y + C2 -> (2 * X) + Y + (C1 + C2)
 Symbol::pExp Symbol::Impl_::mergeADD(pExp e) {
   if (Operator::ADD != e->operator_) {
-    auto msg = "mergeADD was called ont non ADD Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("mergeADD was called ont non ADD Expression.");
   }
   std::map<pExp, double, compareOperands> operandCounts;
   // Classify operands to coefficient and non-coefficient parts
@@ -656,9 +696,7 @@ Symbol::pExp Symbol::Impl_::mergeADD(pExp e) {
 /// ex) C1 * X * Y * X * C2 -> (C1 * C2) * (X ^ 2) * Y
 Symbol::pExp Symbol::Impl_::mergeMULTIPLY(pExp e) {
   if (Operator::MULTIPLY != e->operator_) {
-    auto msg = "mergeMULTIPLY was called on non-MULTIPLY Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("mergeMULTIPLY was called on non-MULTIPLY Expression.");
   }
   auto constOperand = constructOne();
   std::map<pExp, pExp, compareOperands> nonConstOperands;
@@ -707,9 +745,7 @@ Symbol::pExp Symbol::Impl_::mergeMULTIPLY(pExp e) {
 ///   X ^ 1 -> X
 Symbol::pExp Symbol::Impl_::mergePOWER(pExp e) {
   if (Operator::POWER != e->operator_) {
-    auto msg = "mergePOWER called on non-POWER Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("mergePOWER called on non-POWER Expression.");
   }
   auto base = e->operands_[0];
   auto expo = e->operands_[1];
@@ -728,9 +764,7 @@ Symbol::pExp Symbol::Impl_::mergePOWER(pExp e) {
 /// log(1) -> 0
 Symbol::pExp Symbol::Impl_::mergeLOG(pExp e) {
   if (Operator::LOG != e->operator_) {
-    auto msg = "mergeLOG called on non-LOG Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("mergeLOG called on non-LOG Expression.");
   }
   if (e->operands_[0]->isOne()) {
     return constructZero();
@@ -828,9 +862,7 @@ Symbol::pExp Symbol::Impl_::simplify(pExp e) {
 
 Symbol::pExp Symbol::Impl_::differentiate(pExp y, Operand x) {
   if (Operator::CONST == x->operator_) {
-    auto msg = "Cannot differentiate with CONST Expression.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("Cannot differentiate with CONST Expression.");
   }
   if ((y - x)->isZero()) {
     return constructOne();
@@ -958,9 +990,7 @@ void Symbol::Impl_::Exp::assign(double val) {
     *pVal_ = val;
     break;
   default:
-    auto msg = "Cannot assign value to compound expressions.";
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
+    LOG_AND_THROW("Cannot assign value to compound expressions.");
   }
 }
 
