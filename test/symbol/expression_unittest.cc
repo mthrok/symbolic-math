@@ -4,28 +4,48 @@
 INITIALIZE_EASYLOGGINGPP
 
 TEST(Expression, ConstInitialization) {
-  Symbol::Expression c0(0);
-  Symbol::Expression c1(1);
-  Symbol::Expression c2(2);
+  Symbol::Expression zero(0);
+  Symbol::Expression one(1);
+  Symbol::Expression two(2);
 
-  EXPECT_EQ(c0, 0);
-  EXPECT_EQ(c1, 1);
-  EXPECT_EQ(c2, 2);
+  Symbol::Expression n_zero(-0);
+  Symbol::Expression n_one(-1);
+  Symbol::Expression n_two(-2);
 
-  EXPECT_NE(c0, 2);
-  EXPECT_NE(c1, 0);
-  EXPECT_NE(c2, 1);
+  EXPECT_EQ("0", zero);
+  EXPECT_EQ("1", one);
+  EXPECT_EQ("2", two);
+
+  EXPECT_EQ("0", n_zero);
+  EXPECT_EQ(" - 1", n_one);
+  EXPECT_EQ(" - 2", n_two);
+
+  EXPECT_EQ(zero, 0);
+  EXPECT_EQ(one, 1);
+  EXPECT_EQ(two, 2);
+
+  EXPECT_EQ(n_zero, 0);
+  EXPECT_EQ(n_one, -1);
+  EXPECT_EQ(n_two, -2);
+
+  EXPECT_NE(zero, 1);
+  EXPECT_NE(one,  2);
+  EXPECT_NE(two,  0);
+
+  EXPECT_NE(n_zero, -1);
+  EXPECT_NE(n_one,  1);
+  EXPECT_NE(n_two,  2);
 }
 
 TEST(Expression, VariableInitialization) {
-  Symbol::Expression x("x");
-  Symbol::Expression y("y");
+  Symbol::Expression x("x", 3);
+  Symbol::Expression y("y", 5);
 
-  EXPECT_EQ(x, "x");
-  EXPECT_EQ(y, "y");
+  EXPECT_EQ("x", x);
+  EXPECT_EQ("y", y);
 
-  EXPECT_NE(x, "y");
-  EXPECT_NE(y, "x");
+  EXPECT_NE("y", x);
+  EXPECT_NE("x", y);
 }
 
 TEST(Expression, ConstantEquality) {
@@ -33,33 +53,42 @@ TEST(Expression, ConstantEquality) {
   Symbol::Expression one(1);
   Symbol::Expression two(2);
 
-  EXPECT_EQ(zero, 0);
-  EXPECT_EQ(one,  1);
-  EXPECT_EQ(two,  2);
-
-  EXPECT_NE(zero, 1);
-  EXPECT_NE(one,  2);
-  EXPECT_NE(two,  0);
+  Symbol::Expression n_zero(-0);
+  Symbol::Expression n_one(-1);
+  Symbol::Expression n_two(-2);
 
   EXPECT_EQ(zero, zero);
   EXPECT_EQ(one, one);
   EXPECT_EQ(two, two);
 
-  EXPECT_NE(zero, one);
-  EXPECT_NE(one, two);
-  EXPECT_NE(two, zero);
+  EXPECT_EQ(zero, n_zero);
+  EXPECT_NE(one, n_one);
+  EXPECT_NE(two, n_two);
 }
 
 TEST(Expression, VariableEquality) {
-  Symbol::Expression x("x");
-  Symbol::Expression y1("y");
+  Symbol::Expression x("x", 3);
+  Symbol::Expression y1("y", 5);
   Symbol::Expression y2("y");
+  // Normally we don't initialize
+  // variables with duplicated names
+
+  EXPECT_EQ(x, 3);
+
+  EXPECT_EQ(y1, 5);
+
+  EXPECT_EQ(y2, NAN);
+
+  EXPECT_NE(y1, NAN);
 
   EXPECT_EQ(x, x);
 
   EXPECT_NE(x, y1);
 
   EXPECT_EQ(y1, y2);
+  // Expressions are compared on symbol-base,
+  // so they are equal even though they have different values
+  // To include values, evaluate() should be used.
 }
 
 TEST(Expression, ConstantNegation) {
@@ -69,14 +98,15 @@ TEST(Expression, ConstantNegation) {
   Symbol::Expression nOne(-1);
   Symbol::Expression nTwo(-2);
 
+  EXPECT_EQ("0", -zero);
+  EXPECT_EQ(" - 1", -one);
+  EXPECT_EQ(" - 2", -two);
+
   EXPECT_EQ(zero, -zero);
-
   EXPECT_EQ(-one, nOne);
-
   EXPECT_EQ(-two, nTwo);
 
   EXPECT_NE(nOne, one);
-
   EXPECT_NE(two, nTwo);
 }
 
@@ -85,13 +115,14 @@ TEST(Expression, VariableNegation) {
   Symbol::Expression y = -x;
   Symbol::Expression z = -x;
 
-  EXPECT_NE(x, y);
+  EXPECT_EQ(" - x", y);
+  EXPECT_EQ(" - x", z);
 
+  EXPECT_NE(x, y);
   EXPECT_EQ(y, z);
 
   EXPECT_EQ(x, -y);
-
-  EXPECT_EQ(-x, y);
+  EXPECT_EQ(-y, -z);
 }
 
 TEST(Expression, ConstantAddition) {
@@ -131,7 +162,6 @@ TEST(Expression, MixedAddition) {
   Symbol::Expression zero(0);
   Symbol::Expression one(1);
   Symbol::Expression two(2);
-  Symbol::Expression n_two(-2);
 
   Symbol::Expression x("x");
   Symbol::Expression y("y");
@@ -140,9 +170,8 @@ TEST(Expression, MixedAddition) {
   EXPECT_EQ(x + zero, x);
 
   EXPECT_EQ(x + two, "2 + x");
-  EXPECT_EQ(x - two, " - 2 + x");
-
-  EXPECT_EQ(x + n_two, " - 2 + x");
+  EXPECT_EQ(x + two + one, "3 + x");
+  EXPECT_EQ(x + zero + one, "1 + x");
 
   EXPECT_EQ(x + one + one, two + x);
   EXPECT_NE(y + one + one, two + x);
@@ -157,8 +186,14 @@ TEST(Expression, ConstantSubtraction) {
   Symbol::Expression one(1);
   Symbol::Expression two(2);
   Symbol::Expression n_one(-1);
+  Symbol::Expression n_two(-2);
+
+  EXPECT_EQ(zero, "0");
+  EXPECT_EQ(one, "1");
+  EXPECT_EQ(two, "2");
 
   EXPECT_EQ(one - one, "0");
+
   EXPECT_EQ(one - one, zero);
 
   EXPECT_EQ(two - one, one);

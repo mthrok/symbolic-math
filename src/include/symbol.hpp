@@ -82,6 +82,8 @@ namespace Symbol {
   bool operator == (const Expression &e1, const Expression &e2);
   bool operator == (const Expression &e, const std::string strExp);
   bool operator == (const std::string strExp, const Expression &e);
+  bool operator == (const Expression &e, const double c);
+  bool operator == (const double c, const Expression &e);
   bool operator != (const Expression &e1, const Expression &e2);
   bool operator != (const Expression &e, const std::string strExp);
   bool operator != (const std::string strExp, const Expression &e);
@@ -170,7 +172,7 @@ class Symbol::Expression {
 
 public:
   Expression(double constant);
-  Expression(const std::string name, const double c = 1);
+  Expression(const std::string name, const double c = NAN);
 
   Expression differentiate(const Expression &dx);
 
@@ -382,7 +384,6 @@ pExpression Symbol::Impl_::flattenMultiOperands(pExpression pExp) {
     auto msg = "flattenMultiOperands must be called on ADD or MULTIPLY Expression.";
     LOG(ERROR) << msg;
     throw std::runtime_error(msg);
-
   }
   Operands newOperands;
   for (auto& operand_ : pExp->operands_) {
@@ -983,6 +984,17 @@ bool Symbol::operator == (const Expression& e, const std::string strExp) {
 
 bool Symbol::operator == (const std::string strExp, const Expression& e) {
   return e == strExp;
+}
+
+bool Symbol::operator == (const Expression &e, const double c) {
+  if (std::isnan(c)) {
+    return std::isnan(e.evaluate());
+  }
+  return e.evaluate() == c;
+}
+
+bool Symbol::operator == (const double c, const Expression &e) {
+  return e == c;
 }
 
 bool Symbol::operator != (const Expression& e1, const Expression& e2) {
