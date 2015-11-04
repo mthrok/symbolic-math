@@ -11,43 +11,51 @@ TEST(Impl_, ConstantConstruction) {
   auto zero = constructZero();
   auto three = constructCONST(3);
 
-  EXPECT_EQ(1, one->value());
-  EXPECT_EQ("1", one->id());
-  EXPECT_EQ(Operator::CONST, one->operator_);
-  EXPECT_EQ(0, one->operands_.size());
+  ASSERT_EQ(1, one->value());
+  ASSERT_EQ("1", one->id());
 
-  EXPECT_EQ(0, zero->value());
-  EXPECT_EQ("0", zero->id());
-  EXPECT_EQ(Operator::CONST, zero->operator_);
-  EXPECT_EQ(0, zero->operands_.size());
+  ASSERT_EQ(0, zero->value());
+  ASSERT_EQ("0", zero->id());
 
-  EXPECT_EQ(3, three->value());
-  EXPECT_EQ("3", three->id());
-  EXPECT_EQ(0, three->operands_.size());
+  ASSERT_EQ(3, three->value());
+  ASSERT_EQ("3", three->id());
+}
+
+TEST(Impl_, FloatConstantConstruction) {
+  auto c = constructCONST(2.5);
+
+  ASSERT_EQ("2.500", c->id());
 }
 
 TEST(Impl_, VariableConstruction) {
+  auto v = constructVARIABLE("v");
+  auto w = constructVARIABLE("w");
+
+  ASSERT_EQ("v", v->name_);
+  ASSERT_EQ("v", v->id());
+  ASSERT_TRUE(std::isnan(w->value()));
+
+  ASSERT_EQ("w", w->name_);
+  ASSERT_EQ("w", w->id());
+  ASSERT_TRUE(std::isnan(w->value()));
+}
+
+TEST(Impl_, VariableConstructionWithInitialValue) {
   auto x = constructVARIABLE("x", 1);
   auto y = constructVARIABLE("y", 2);
   auto z = constructVARIABLE("z", 3);
 
-  EXPECT_EQ("x", x->name_);
-  EXPECT_EQ("x", x->id());
-  EXPECT_EQ(1, x->value());
-  EXPECT_EQ(Operator::VARIABLE, x->operator_);
-  EXPECT_EQ(0, x->operands_.size());
+  ASSERT_EQ("x", x->name_);
+  ASSERT_EQ("x", x->id());
+  ASSERT_EQ(1, x->value());
 
-  EXPECT_EQ("y", y->name_);
-  EXPECT_EQ("y", y->id());
-  EXPECT_EQ(2, y->value());
-  EXPECT_EQ(Operator::VARIABLE, y->operator_);
-  EXPECT_EQ(0, y->operands_.size());
+  ASSERT_EQ("y", y->name_);
+  ASSERT_EQ("y", y->id());
+  ASSERT_EQ(2, y->value());
 
-  EXPECT_EQ("z", z->name_);
-  EXPECT_EQ("z", z->id());
-  EXPECT_EQ(3, z->value());
-  EXPECT_EQ(Operator::VARIABLE, z->operator_);
-  EXPECT_EQ(0, z->operands_.size());
+  ASSERT_EQ("z", z->name_);
+  ASSERT_EQ("z", z->id());
+  ASSERT_EQ(3, z->value());
 }
 
 TEST(Impl_, NegationConstruction) {
@@ -57,15 +65,13 @@ TEST(Impl_, NegationConstruction) {
   auto n_x = constructNEGATE(x);
   auto n_ten = constructNEGATE(ten);
 
-  EXPECT_EQ(" - x", n_x->id());
-  EXPECT_EQ(Operator::NEGATE, n_x->operator_);
-  EXPECT_EQ(1, n_x->operands_.size());
-  EXPECT_EQ(x, n_x->operands_[0]);
+  ASSERT_EQ(" - x", n_x->id());
+  ASSERT_EQ(Operator::NEGATE, n_x->operator_);
+  ASSERT_EQ(x, n_x->operands_[0]);
 
-  EXPECT_EQ(" - 10", n_ten->id());
-  EXPECT_EQ(Operator::NEGATE, n_ten->operator_);
-  EXPECT_EQ(1, n_ten->operands_.size());
-  EXPECT_EQ(ten, n_ten->operands_[0]);
+  ASSERT_EQ(" - 10", n_ten->id());
+  ASSERT_EQ(Operator::NEGATE, n_ten->operator_);
+  ASSERT_EQ(ten, n_ten->operands_[0]);
 }
 
 TEST(Impl_, PolynomialConstruction) {
@@ -79,120 +85,120 @@ TEST(Impl_, PolynomialConstruction) {
 
   auto addxxx = constructADD({x, x, x});
 
-  EXPECT_EQ(Operator::ADD, addxxx->operator_);
-  EXPECT_EQ("x + x + x", addxxx->id());
-  EXPECT_EQ(x, addxxx->operands_[0]);
-  EXPECT_EQ(x, addxxx->operands_[1]);
-  EXPECT_EQ(x, addxxx->operands_[2]);
+  ASSERT_EQ(Operator::ADD, addxxx->operator_);
+  ASSERT_EQ("x + x + x", addxxx->id());
+  ASSERT_EQ(x, addxxx->operands_[0]);
+  ASSERT_EQ(x, addxxx->operands_[1]);
+  ASSERT_EQ(x, addxxx->operands_[2]);
 
   auto addxyz = constructADD({x, y, z});
 
-  EXPECT_EQ(Operator::ADD, addxyz->operator_);
-  EXPECT_EQ("x + y + z", addxyz->id());
-  EXPECT_EQ(x, addxyz->operands_[0]);
-  EXPECT_EQ(y, addxyz->operands_[1]);
-  EXPECT_EQ(z, addxyz->operands_[2]);
+  ASSERT_EQ(Operator::ADD, addxyz->operator_);
+  ASSERT_EQ("x + y + z", addxyz->id());
+  ASSERT_EQ(x, addxyz->operands_[0]);
+  ASSERT_EQ(y, addxyz->operands_[1]);
+  ASSERT_EQ(z, addxyz->operands_[2]);
 
   auto addzyx = constructADD({z, y, x});
 
-  EXPECT_EQ(Operator::ADD, addzyx->operator_);
-  EXPECT_EQ("z + y + x", addzyx->id());
-  EXPECT_EQ(z, addzyx->operands_[0]);
-  EXPECT_EQ(y, addzyx->operands_[1]);
-  EXPECT_EQ(x, addzyx->operands_[2]);
+  ASSERT_EQ(Operator::ADD, addzyx->operator_);
+  ASSERT_EQ("z + y + x", addzyx->id());
+  ASSERT_EQ(z, addzyx->operands_[0]);
+  ASSERT_EQ(y, addzyx->operands_[1]);
+  ASSERT_EQ(x, addzyx->operands_[2]);
 
   auto addxyzxxxzyx = constructADD({addxyz, addxxx, addzyx});
 
-  EXPECT_EQ(Operator::ADD, addxyzxxxzyx->operator_);
-  EXPECT_EQ("(x + y + z) + (x + x + x) + (z + y + x)", addxyzxxxzyx->id());
-  EXPECT_EQ(addxyz, addxyzxxxzyx->operands_[0]);
-  EXPECT_EQ(addxxx, addxyzxxxzyx->operands_[1]);
-  EXPECT_EQ(addzyx, addxyzxxxzyx->operands_[2]);
+  ASSERT_EQ(Operator::ADD, addxyzxxxzyx->operator_);
+  ASSERT_EQ("(x + y + z) + (x + x + x) + (z + y + x)", addxyzxxxzyx->id());
+  ASSERT_EQ(addxyz, addxyzxxxzyx->operands_[0]);
+  ASSERT_EQ(addxxx, addxyzxxxzyx->operands_[1]);
+  ASSERT_EQ(addzyx, addxyzxxxzyx->operands_[2]);
 
   auto multixyz = constructMULTIPLY({x, y, z});
 
-  EXPECT_EQ(Operator::MULTIPLY, multixyz->operator_);
-  EXPECT_EQ("x * y * z", multixyz->id());
-  EXPECT_EQ(x, multixyz->operands_[0]);
-  EXPECT_EQ(y, multixyz->operands_[1]);
-  EXPECT_EQ(z, multixyz->operands_[2]);
+  ASSERT_EQ(Operator::MULTIPLY, multixyz->operator_);
+  ASSERT_EQ("x * y * z", multixyz->id());
+  ASSERT_EQ(x, multixyz->operands_[0]);
+  ASSERT_EQ(y, multixyz->operands_[1]);
+  ASSERT_EQ(z, multixyz->operands_[2]);
 
   auto multixxx = constructMULTIPLY({x, x, x});
 
-  EXPECT_EQ(Operator::MULTIPLY, multixxx->operator_);
-  EXPECT_EQ("x * x * x", multixxx->id());
-  EXPECT_EQ(x, multixxx->operands_[0]);
-  EXPECT_EQ(x, multixxx->operands_[1]);
-  EXPECT_EQ(x, multixxx->operands_[2]);
+  ASSERT_EQ(Operator::MULTIPLY, multixxx->operator_);
+  ASSERT_EQ("x * x * x", multixxx->id());
+  ASSERT_EQ(x, multixxx->operands_[0]);
+  ASSERT_EQ(x, multixxx->operands_[1]);
+  ASSERT_EQ(x, multixxx->operands_[2]);
 
   auto multizyx = constructMULTIPLY({z, y, x});
 
-  EXPECT_EQ(Operator::MULTIPLY, multizyx->operator_);
-  EXPECT_EQ("z * y * x", multizyx->id());
-  EXPECT_EQ(z, multizyx->operands_[0]);
-  EXPECT_EQ(y, multizyx->operands_[1]);
-  EXPECT_EQ(x, multizyx->operands_[2]);
+  ASSERT_EQ(Operator::MULTIPLY, multizyx->operator_);
+  ASSERT_EQ("z * y * x", multizyx->id());
+  ASSERT_EQ(z, multizyx->operands_[0]);
+  ASSERT_EQ(y, multizyx->operands_[1]);
+  ASSERT_EQ(x, multizyx->operands_[2]);
 
   auto multixyzxxxzyx = constructMULTIPLY({multixyz, multixxx, multizyx});
 
-  EXPECT_EQ(Operator::MULTIPLY, multixyzxxxzyx->operator_);
-  EXPECT_EQ("(x * y * z) * (x * x * x) * (z * y * x)", multixyzxxxzyx->id());
-  EXPECT_EQ(multixyz, multixyzxxxzyx->operands_[0]);
-  EXPECT_EQ(multixxx, multixyzxxxzyx->operands_[1]);
-  EXPECT_EQ(multizyx, multixyzxxxzyx->operands_[2]);
+  ASSERT_EQ(Operator::MULTIPLY, multixyzxxxzyx->operator_);
+  ASSERT_EQ("(x * y * z) * (x * x * x) * (z * y * x)", multixyzxxxzyx->id());
+  ASSERT_EQ(multixyz, multixyzxxxzyx->operands_[0]);
+  ASSERT_EQ(multixxx, multixyzxxxzyx->operands_[1]);
+  ASSERT_EQ(multizyx, multixyzxxxzyx->operands_[2]);
 
   auto powx3 = constructPOWER({x, three});
 
-  EXPECT_EQ(Operator::POWER, powx3->operator_);
-  EXPECT_EQ("x ^ 3", powx3->id());
-  EXPECT_EQ(x, powx3->operands_[0]);
-  EXPECT_EQ(three, powx3->operands_[1]);
+  ASSERT_EQ(Operator::POWER, powx3->operator_);
+  ASSERT_EQ("x ^ 3", powx3->id());
+  ASSERT_EQ(x, powx3->operands_[0]);
+  ASSERT_EQ(three, powx3->operands_[1]);
 
   auto powxy = constructPOWER({x, y});
 
-  EXPECT_EQ(Operator::POWER, powxy->operator_);
-  EXPECT_EQ("x ^ y", powxy->id());
-  EXPECT_EQ(x, powxy->operands_[0]);
-  EXPECT_EQ(y, powxy->operands_[1]);
+  ASSERT_EQ(Operator::POWER, powxy->operator_);
+  ASSERT_EQ("x ^ y", powxy->id());
+  ASSERT_EQ(x, powxy->operands_[0]);
+  ASSERT_EQ(y, powxy->operands_[1]);
 
   auto powxaddxyz = constructPOWER({x, addxyz});
 
-  EXPECT_EQ(Operator::POWER, powxaddxyz->operator_);
-  EXPECT_EQ("x ^ (x + y + z)", powxaddxyz->id());
-  EXPECT_EQ(x, powxaddxyz->operands_[0]);
-  EXPECT_EQ(addxyz, powxaddxyz->operands_[1]);
+  ASSERT_EQ(Operator::POWER, powxaddxyz->operator_);
+  ASSERT_EQ("x ^ (x + y + z)", powxaddxyz->id());
+  ASSERT_EQ(x, powxaddxyz->operands_[0]);
+  ASSERT_EQ(addxyz, powxaddxyz->operands_[1]);
 
   auto powmultizyxxpowx3 = constructPOWER({multizyx, powx3});
 
-  EXPECT_EQ(Operator::POWER, powmultizyxxpowx3->operator_);
-  EXPECT_EQ("(z * y * x) ^ (x ^ 3)", powmultizyxxpowx3->id());
-  EXPECT_EQ(multizyx, powmultizyxxpowx3->operands_[0]);
-  EXPECT_EQ(powx3, powmultizyxxpowx3->operands_[1]);
+  ASSERT_EQ(Operator::POWER, powmultizyxxpowx3->operator_);
+  ASSERT_EQ("(z * y * x) ^ (x ^ 3)", powmultizyxxpowx3->id());
+  ASSERT_EQ(multizyx, powmultizyxxpowx3->operands_[0]);
+  ASSERT_EQ(powx3, powmultizyxxpowx3->operands_[1]);
 
   auto invx = constructInverse(x);
 
-  EXPECT_EQ(Operator::POWER, invx->operator_);
-  EXPECT_EQ("x ^ ( - 1)", invx->id());
-  EXPECT_EQ(x, invx->operands_[0]);
+  ASSERT_EQ(Operator::POWER, invx->operator_);
+  ASSERT_EQ("x ^ ( - 1)", invx->id());
+  ASSERT_EQ(x, invx->operands_[0]);
 
   auto invaddxyz = constructInverse(addxyz);
 
-  EXPECT_EQ(Operator::POWER, invaddxyz->operator_);
-  EXPECT_EQ("(x + y + z) ^ ( - 1)", invaddxyz->id());
-  EXPECT_EQ(addxyz, invaddxyz->operands_[0]);
+  ASSERT_EQ(Operator::POWER, invaddxyz->operator_);
+  ASSERT_EQ("(x + y + z) ^ ( - 1)", invaddxyz->id());
+  ASSERT_EQ(addxyz, invaddxyz->operands_[0]);
 
-  EXPECT_THROW(constructPOWER({}), std::runtime_error);
-  EXPECT_THROW(constructPOWER({x}), std::runtime_error);
-  EXPECT_THROW(constructPOWER({x, x, y}), std::runtime_error);
+  ASSERT_THROW(constructPOWER({}), std::runtime_error);
+  ASSERT_THROW(constructPOWER({x}), std::runtime_error);
+  ASSERT_THROW(constructPOWER({x, x, y}), std::runtime_error);
 
   auto logx = constructLOG(x);
 
-  EXPECT_EQ(Operator::LOG, logx->operator_);
-  EXPECT_EQ("log(x)", logx->id());
-  EXPECT_EQ(x, logx->operands_[0]);
+  ASSERT_EQ(Operator::LOG, logx->operator_);
+  ASSERT_EQ("log(x)", logx->id());
+  ASSERT_EQ(x, logx->operands_[0]);
 
-  EXPECT_THROW(constructLOG(zero), std::runtime_error);
-  EXPECT_THROW(constructLOG(-zero), std::runtime_error);
-  EXPECT_THROW(constructLOG(-one), std::runtime_error);
-  EXPECT_NO_THROW(constructLOG(-x));
+  ASSERT_THROW(constructLOG(zero), std::runtime_error);
+  ASSERT_THROW(constructLOG(-zero), std::runtime_error);
+  ASSERT_THROW(constructLOG(-one), std::runtime_error);
+  ASSERT_NO_THROW(constructLOG(-x));
 }
