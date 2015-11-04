@@ -130,15 +130,15 @@ TEST(Expression, ConstantAddition) {
   Symbol::Expression one(1);
   Symbol::Expression two(2);
 
-  EXPECT_EQ(one + one, two);
+  EXPECT_EQ(2, one + one);
+  EXPECT_EQ(3, one + two);
 
+  EXPECT_EQ(two, one + one);
   EXPECT_EQ(one + one, two + zero);
-
+  EXPECT_EQ(one + two, two + one);
   EXPECT_EQ(one + one + zero, two + zero);
-
-  EXPECT_EQ((one + one) + zero, two);
-
-  EXPECT_EQ(one + (one + zero), two);
+  EXPECT_EQ(two, (one + one) + zero);
+  EXPECT_EQ(two, one + (one + zero));
 }
 
 TEST(Expression, VariableAddition) {
@@ -166,12 +166,12 @@ TEST(Expression, MixedAddition) {
   Symbol::Expression x("x");
   Symbol::Expression y("y");
 
+  EXPECT_EQ("2 + x", x + two);
+  EXPECT_EQ("3 + x", x + two + one);
+  EXPECT_EQ("1 + x", x + zero + one);
+
   EXPECT_EQ(x + two, two + x);
   EXPECT_EQ(x + zero, x);
-
-  EXPECT_EQ(x + two, "2 + x");
-  EXPECT_EQ(x + two + one, "3 + x");
-  EXPECT_EQ(x + zero + one, "1 + x");
 
   EXPECT_EQ(x + one + one, two + x);
   EXPECT_NE(y + one + one, two + x);
@@ -188,26 +188,32 @@ TEST(Expression, ConstantSubtraction) {
   Symbol::Expression n_one(-1);
   Symbol::Expression n_two(-2);
 
-  EXPECT_EQ(zero, "0");
-  EXPECT_EQ(one, "1");
-  EXPECT_EQ(two, "2");
+  EXPECT_EQ(0, one - one);
+  EXPECT_EQ("0", one - one);
+  EXPECT_EQ(zero, one - one);
 
-  EXPECT_EQ(one - one, "0");
+  EXPECT_EQ(0, - one + one);
+  EXPECT_EQ("0", - one + one);
+  EXPECT_EQ(zero, - one + one);
 
-  EXPECT_EQ(one - one, zero);
+  EXPECT_EQ(zero, zero - zero);
+  EXPECT_EQ(zero, - zero + zero);
 
-  EXPECT_EQ(two - one, one);
-  EXPECT_EQ(two - one - one, zero);
+  EXPECT_EQ(zero, two - one - one);
+  EXPECT_EQ(zero, - one + two - one);
 
-  EXPECT_EQ(zero - zero, zero);
+  EXPECT_EQ(one, two - one);
+  EXPECT_EQ(one, - one + two);
+
+  EXPECT_EQ(one, one - zero);
   EXPECT_EQ(one - zero, two - one);
-  EXPECT_EQ(one - zero, one);
 
-  EXPECT_NE(two - one, zero);
-  EXPECT_NE(two - one - zero, two);
-  EXPECT_EQ(two - one - one, zero);
+  EXPECT_NE(zero, two - one);
+  EXPECT_NE(two, two - one - zero);
+  EXPECT_EQ(zero, two - one - one);
 
-  EXPECT_EQ(one - n_one, two);
+  EXPECT_EQ(two, one - n_one);
+  EXPECT_EQ(two, - n_one + one);
 }
 
 TEST(Expression, VariableSubtraction) {
@@ -444,8 +450,8 @@ TEST(Expression, Differentiate) {
   EXPECT_EQ(x.differentiate(y), zero);
   EXPECT_EQ((x + y).differentiate(y), one);
   EXPECT_EQ((x - y).differentiate(y), -one);
-
   EXPECT_EQ((x + x).differentiate(x), 2);
+
   EXPECT_EQ((2 * x).differentiate(x), 2);
   EXPECT_EQ((x * x).differentiate(x), 2 * x);
 

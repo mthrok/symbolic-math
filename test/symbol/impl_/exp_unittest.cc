@@ -11,17 +11,17 @@ TEST(Impl_, ConstantConstruction) {
   auto zero = constructZero();
   auto three = constructCONST(3);
 
-  EXPECT_EQ(1, one->value_);
+  EXPECT_EQ(1, one->value());
   EXPECT_EQ("1", one->id());
   EXPECT_EQ(Operator::CONST, one->operator_);
   EXPECT_EQ(0, one->operands_.size());
 
-  EXPECT_EQ(0, zero->value_);
+  EXPECT_EQ(0, zero->value());
   EXPECT_EQ("0", zero->id());
   EXPECT_EQ(Operator::CONST, zero->operator_);
   EXPECT_EQ(0, zero->operands_.size());
 
-  EXPECT_EQ(3, three->value_);
+  EXPECT_EQ(3, three->value());
   EXPECT_EQ("3", three->id());
   EXPECT_EQ(0, three->operands_.size());
 }
@@ -33,19 +33,19 @@ TEST(Impl_, VariableConstruction) {
 
   EXPECT_EQ("x", x->name_);
   EXPECT_EQ("x", x->id());
-  EXPECT_EQ(1, x->value_);
+  EXPECT_EQ(1, x->value());
   EXPECT_EQ(Operator::VARIABLE, x->operator_);
   EXPECT_EQ(0, x->operands_.size());
 
   EXPECT_EQ("y", y->name_);
   EXPECT_EQ("y", y->id());
-  EXPECT_EQ(2, y->value_);
+  EXPECT_EQ(2, y->value());
   EXPECT_EQ(Operator::VARIABLE, y->operator_);
   EXPECT_EQ(0, y->operands_.size());
 
   EXPECT_EQ("z", z->name_);
   EXPECT_EQ("z", z->id());
-  EXPECT_EQ(3, z->value_);
+  EXPECT_EQ(3, z->value());
   EXPECT_EQ(Operator::VARIABLE, z->operator_);
   EXPECT_EQ(0, z->operands_.size());
 }
