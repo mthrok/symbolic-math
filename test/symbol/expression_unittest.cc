@@ -131,11 +131,18 @@ TEST(Expression, MixedAddition) {
   Symbol::Expression zero(0);
   Symbol::Expression one(1);
   Symbol::Expression two(2);
+  Symbol::Expression n_two(-2);
+
   Symbol::Expression x("x");
   Symbol::Expression y("y");
 
   EXPECT_EQ(x + two, two + x);
   EXPECT_EQ(x + zero, x);
+
+  EXPECT_EQ(x + two, "2 + x");
+  EXPECT_EQ(x - two, " - 2 + x");
+
+  EXPECT_EQ(x + n_two, " - 2 + x");
 
   EXPECT_EQ(x + one + one, two + x);
   EXPECT_NE(y + one + one, two + x);
@@ -177,9 +184,9 @@ TEST(Expression, VariableSubtraction) {
   Symbol::Expression e1 = v - w;
   Symbol::Expression e2 = v - w - x - y - z;
 
-  EXPECT_EQ(e1, "( - w + v)");
+  EXPECT_EQ(e1, " - w + v");
 
-  EXPECT_EQ(e2, "( - w - x - y - z + v)");
+  EXPECT_EQ(e2, " - w - x - y - z + v");
 
   EXPECT_EQ(e1, v - w);
 
@@ -369,10 +376,10 @@ TEST(Expression, MixedPower) {
   EXPECT_EQ(x ^ y, x ^ (2 * y - y));
   EXPECT_EQ((x ^ 2) * (4 * x), x * ((2 * x) ^ 2));
 
-  EXPECT_EQ(x ^ x ^ x ^ x, "(((x ^ x) ^ x) ^ x)");
+  EXPECT_EQ("((x ^ x) ^ x) ^ x", x ^ x ^ x ^ x);
   EXPECT_EQ((((x ^ one) ^ two) ^ three), x ^ six);
 
-  EXPECT_EQ((x ^ y) ^ two, "(x ^ (2 * y))");
+  EXPECT_EQ("x ^ (2 * y)", (x ^ y) ^ two);
   EXPECT_EQ((x ^ y) ^ two, x ^ (y + y));
 }
 

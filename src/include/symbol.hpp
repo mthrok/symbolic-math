@@ -129,10 +129,12 @@ public:
 
   void assertOperationConsistency() const;
   bool isConst() const;
+  bool isNegative() const;
+  bool isPositive() const;
   bool isZero() const;
   bool isOne() const;
 
-  std::string id() const;
+  std::string id(bool bracket=false) const;
 
   void assign(double value);
   double evaluate() const;
@@ -254,8 +256,8 @@ void Symbol::Impl_::Exp::assertOperationConsistency() const {
   case Operator::LOG:
     if (nOperands != 1)
       error_message = "LOG Expression must have only exactly operand.";
-    if (Operator::CONST == operands_[0]->operator_) {
-      if (operands_[0]->isZero() || operands_[0]->value_ <= 0) {
+    if (operands_[0]->isConst()) {
+      if (!operands_[0]->isPositive()) {
         error_message = "Operand of LOG Expression must greater than zero.";
       }
     }
@@ -269,6 +271,14 @@ void Symbol::Impl_::Exp::assertOperationConsistency() const {
 
 bool Symbol::Impl_::Exp::isConst() const {
   return Operator::CONST == operator_;
+}
+
+bool Symbol::Impl_::Exp::isPositive() const {
+  return isConst() && !isZero() && value_ > 0.0;
+}
+
+bool Symbol::Impl_::Exp::isNegative() const {
+  return isConst() && !isZero() && value_ < 0.0;
 }
 
 bool Symbol::Impl_::Exp::isZero() const {
@@ -548,11 +558,19 @@ pExpression Symbol::Impl_::mergeADD(pExpression pExp) {
   }
   std::map<pExpression, double, defaultCompare> operandCounts;
   // Classify operands to coefficient and non-coefficient parts
+  auto constTerm = constructZero();
   for (auto& operand_ : pExp->operands_) {
-    auto elems = decompose2(operand_);
-    auto coeff = elems[0];
-    auto nonCoeff = elems[1];
-    operandCounts[nonCoeff] += coeff->value_;
+    if (operand_->isConst()) {
+      constTerm->value_ += operand_->value_;
+    } else {
+      auto elems = decompose2(operand_);
+      auto coeff = elems[0];
+      auto nonCoeff = elems[1];
+      operandCounts[nonCoeff] += coeff->value_;
+    }
+  }
+  if (!constTerm->isZero()) {
+    operandCounts[constTerm] = 1;
   }
   // Reconstruct Expression
   Operands operands;
@@ -801,9 +819,10 @@ pExpression Symbol::Impl_::differentiate(pExpression y, Operand x) {
   }
 }
 
-std::string Symbol::Impl_::Exp::id() const {
+std::string Symbol::Impl_::Exp::id(bool bracket) const {
+  std::string ret;
   switch(operator_) {
-  case Operator::CONST: {
+  case Operator::CONST:
     if (isZero()) {
       return "0";
     } else if (isOne()) {
@@ -812,46 +831,62 @@ std::string Symbol::Impl_::Exp::id() const {
       std::stringstream ss;
       int roundedValue = std::round(value_);
       if (isNearlyEqual(value_, roundedValue)) {
-        ss << std::fixed << std::setprecision(0) << value_;
+        ss << std::fixed << std::setprecision(0) << std::abs(value_);
       } else {
-        ss << std::fixed << std::setprecision(3) << value_;
+        ss << std::fixed << std::setprecision(3) << std::abs(value_);
       }
-      return ss.str();
+      if (isNegative()) {
+        ret = " - " + ss.str();
+      } else {
+        return ss.str();
+      }
     }
-  }
+    break;
   case Operator::VARIABLE:
     return name_;
   case Operator::NEGATE:
-    return " - " + operands_[0]->id();
-  case Operator::ADD: {
-    std::string ret;
+    ret = " - " + operands_[0]->id(true);
+    break;
+  case Operator::ADD:
     for (auto& operand : operands_) {
-      auto append = operand->id();
-      if (0 != ret.size()) {
-        if (append.compare(0, 3, " - ")) {
+      std::string append;
+      if (operand->isNegative() ||
+          operand->operator_ == Operator::NEGATE) {
+        append = operand->id(false);
+        ret += append;
+      } else {
+        append = operand->id(true);
+        if (0 != ret.size())
           ret += " + ";
-        }
+        ret += append;
       }
-	ret += append;
     }
-    return "(" + ret + ")";
-  }
-  case Operator::MULTIPLY: {
-    std::string ret;
+    break;
+  case Operator::MULTIPLY:
     for (auto& operand : operands_) {
-      auto append = operand->id();
+      auto append = operand->id(true);
       if (0 != ret.size()) {
         ret += " * ";
       }
       ret += append;
     }
-    return "(" + ret + ")";
+    break;
+  case Operator::POWER: {
+    auto base = operands_[0]->id(true);
+    auto expo = operands_[1]->id(true);
+    std::string ret = base + " ^ " + expo;
+    if (bracket) {
+      ret = "(" + ret + ")";
+    }
+    return ret;
   }
-  case Operator::POWER:
-    return "(" + operands_[0]->id() + " ^ " + operands_[1]->id() + ")";
   case Operator::LOG:
-    return "log(" + operands_[0]->id() + ")";
+    return "log(" + operands_[0]->id(false) + ")";
   }
+  if (bracket) {
+    ret = "(" + ret + ")";
+  }
+  return ret;
 }
 
 void Symbol::Impl_::Exp::assign(double value) {
@@ -943,7 +978,7 @@ bool Symbol::operator == (const Expression& e1, const Expression& e2) {
 }
 
 bool Symbol::operator == (const Expression& e, const std::string strExp) {
-  return e.pExp_->id() == strExp;
+  return e.pExp_->id(false) == strExp;
 }
 
 bool Symbol::operator == (const std::string strExp, const Expression& e) {
@@ -1048,5 +1083,5 @@ double Symbol::Expression::evaluate() const {
 }
 
 std::ostream& Symbol::operator <<(std::ostream& o, const Expression &e) {
-  return o << e.pExp_->id();
+  return o << e.pExp_->id(false);
 }
