@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <cstdint>
 #include <sstream>
 #include <iomanip>
 #include <iostream>
@@ -34,7 +35,7 @@ namespace Symbol {
 
     class Exp;
 
-    class Data;
+    template <typename dtype = double> class Data;
   };
 
   class Expression;
@@ -42,7 +43,7 @@ namespace Symbol {
   typedef std::shared_ptr<Symbol::Impl_::Exp> Operand;
   typedef std::shared_ptr<Symbol::Impl_::Exp> pExp;
   typedef std::vector<Operand> Operands;
-  typedef std::vector<unsigned int> Shape;
+  typedef std::vector<uint32_t> Shape;
 };
 
 #define MAKE_SHARED_EXP std::make_shared<Symbol::Impl_::Exp>
@@ -95,7 +96,8 @@ namespace Symbol {
     pExp operator / (const Operand o1, const Operand o2);
     pExp log (const Operand o);
 
-    std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
+    template<typename dtype>
+    std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data<dtype> &d);
   };
 
   bool operator == (const Expression &e1, const Expression &e2);
@@ -133,18 +135,19 @@ enum class Symbol::Impl_::Operator {
   CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
 };
 
+template<typename dtype>
 class Symbol::Impl_::Data {
   Shape shape_;
-  std::shared_ptr<double> pData_;
+  std::shared_ptr<dtype> pData_;
 public:
   // Scalar Initialization
-  Data(double v);
+  Data(dtype v);
   // Non-scalar Initialization
-  Data(Shape s, double v);
+  Data(Shape s, dtype v);
 
   size_t size() const;
 
-  friend std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
+  friend std::ostream& operator << <>(std::ostream& o, const Symbol::Impl_::Data<dtype> &d);
 };
 
 class Symbol::Impl_::Exp {
@@ -246,22 +249,25 @@ struct Symbol::Impl_::compareOperands {
   }
 };
 
-Symbol::Impl_::Data::Data(double value)
+template<typename dtype>
+Symbol::Impl_::Data<dtype>::Data(dtype value)
   : shape_({1})
-  , pData_(std::make_shared<double>(value))
+  , pData_(std::make_shared<dtype>(value))
 {}
 
-Symbol::Impl_::Data::Data(Shape shape, double value)
+template<typename dtype>
+Symbol::Impl_::Data<dtype>::Data(Shape shape, dtype value)
   : shape_(shape)
-  , pData_(new double[size()], [](double* p){delete[] p;})
+  , pData_(new dtype[size()], [](dtype* p){delete[] p;})
 {
-  double* pData = pData_.get();
+  dtype* pData = pData_.get();
   for(size_t i = 0; i < size(); ++i) {
     pData[i] = value;
   }
 }
 
-size_t Symbol::Impl_::Data::size() const {
+template<typename dtype>
+size_t Symbol::Impl_::Data<dtype>::size() const {
   size_t numel = 1;
   for (auto& s : shape_) {
     numel *= s;
@@ -269,10 +275,45 @@ size_t Symbol::Impl_::Data::size() const {
   return numel;
 }
 
-std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
-  double* pData = d.pData_.get();
-  for(size_t i = 0; i < d.size(); ++i) {
-    o << pData[i] << ", ";
+template<typename dtype>
+void printTensor(std::ostream& o, dtype* &pData, const uint32_t numel) {
+  o << *pData;
+  for (uint32_t i = 1; i < numel; ++i) {
+    ++pData;
+    o << ", " << *pData;
+  }
+  ++pData;
+  o << "\n";
+}
+
+template<typename dtype>
+void printTensor(std::ostream& o, dtype* &pData, const uint32_t  nRow, const uint32_t nCol) {
+  for (uint32_t i = 0; i < nRow; ++i) {
+    printTensor(o, pData, nCol);
+  }
+}
+
+template<typename dtype>
+std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data<dtype> &d) {
+  dtype* pData = d.pData_.get();
+  switch(d.shape_.size()) {
+  case 0:
+    break;
+  case 1:
+    printTensor(o, pData, d.shape_[0]);
+    break;
+  case 2:
+    printTensor(o, pData, d.shape_[0], d.shape_[1]);
+    break;
+  case 3:
+    for (size_t i0 = 0; i0 < d.shape_[0]; ++i0) {
+      o << "[" << i0 << ", :, :] \n";
+      printTensor(o, pData, d.shape_[1], d.shape_[2]);
+      o << "\n";
+    }
+    break;
+  default:
+    o << "Not Implemented Yet.\n";
   }
   return o;
 }
@@ -603,9 +644,9 @@ Symbol::pExp Symbol::Impl_::expandPOWER(pExp e) {
   if (Operator::CONST == expo->operator_) {
     double dExpo = expo->value();
     if (dExpo > 0 && isInteger(dExpo)) {
-      unsigned int iExpo = std::round(dExpo);
+      uint32_t iExpo = std::round(dExpo);
       Operands operands;
-      for (unsigned int i = 0; i < iExpo; ++i) {
+      for (uint32_t i = 0; i < iExpo; ++i) {
         auto operand = base;
           operands.push_back(operand);
       }
