@@ -35,7 +35,7 @@ namespace Symbol {
 
     class Exp;
 
-    template <typename dtype = double> class Data;
+    class Data;
   };
 
   class Expression;
@@ -96,8 +96,7 @@ namespace Symbol {
     pExp operator / (const Operand o1, const Operand o2);
     pExp log (const Operand o);
 
-    template<typename dtype>
-    std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data<dtype> &d);
+    std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
   };
 
   bool operator == (const Expression &e1, const Expression &e2);
@@ -135,19 +134,18 @@ enum class Symbol::Impl_::Operator {
   CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
 };
 
-template<typename dtype>
 class Symbol::Impl_::Data {
   Shape shape_;
-  std::shared_ptr<dtype> pData_;
+  std::shared_ptr<double> pData_;
 public:
   // Scalar Initialization
-  Data(dtype v);
+  Data(double v);
   // Non-scalar Initialization
-  Data(Shape s, dtype v);
+  Data(Shape s, double v);
 
   size_t size() const;
 
-  friend std::ostream& operator << <>(std::ostream& o, const Symbol::Impl_::Data<dtype> &d);
+  friend std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
 };
 
 class Symbol::Impl_::Exp {
@@ -249,25 +247,22 @@ struct Symbol::Impl_::compareOperands {
   }
 };
 
-template<typename dtype>
-Symbol::Impl_::Data<dtype>::Data(dtype value)
+Symbol::Impl_::Data::Data(double value)
   : shape_({1})
-  , pData_(std::make_shared<dtype>(value))
+  , pData_(std::make_shared<double>(value))
 {}
 
-template<typename dtype>
-Symbol::Impl_::Data<dtype>::Data(Shape shape, dtype value)
+Symbol::Impl_::Data::Data(Shape shape, double value)
   : shape_(shape)
-  , pData_(new dtype[size()], [](dtype* p){delete[] p;})
+  , pData_(new double[size()], [](double* p){delete[] p;})
 {
-  dtype* pData = pData_.get();
+  double* pData = pData_.get();
   for(size_t i = 0; i < size(); ++i) {
     pData[i] = value;
   }
 }
 
-template<typename dtype>
-size_t Symbol::Impl_::Data<dtype>::size() const {
+size_t Symbol::Impl_::Data::size() const {
   size_t numel = 1;
   for (auto& s : shape_) {
     numel *= s;
@@ -275,8 +270,7 @@ size_t Symbol::Impl_::Data<dtype>::size() const {
   return numel;
 }
 
-template<typename dtype>
-void printTensor(std::ostream& o, dtype* &pData, const uint32_t numel) {
+void printTensor(std::ostream& o, double* &pData, const uint32_t numel) {
   o << *pData;
   for (uint32_t i = 1; i < numel; ++i) {
     ++pData;
@@ -286,16 +280,14 @@ void printTensor(std::ostream& o, dtype* &pData, const uint32_t numel) {
   o << "\n";
 }
 
-template<typename dtype>
-void printTensor(std::ostream& o, dtype* &pData, const uint32_t  nRow, const uint32_t nCol) {
+void printTensor(std::ostream& o, double* &pData, const uint32_t  nRow, const uint32_t nCol) {
   for (uint32_t i = 0; i < nRow; ++i) {
     printTensor(o, pData, nCol);
   }
 }
 
-template<typename dtype>
-std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data<dtype> &d) {
-  dtype* pData = d.pData_.get();
+std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
+  double* pData = d.pData_.get();
   switch(d.shape_.size()) {
   case 0:
     break;
