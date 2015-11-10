@@ -31,11 +31,14 @@ inline bool isInteger(double value) {
 // Data structure
 namespace Symbol {
   namespace Impl_ {
+
+    enum class Type;
+
+    class Data;
+
     enum class Operator;
 
     class Exp;
-
-    class Data;
   };
 
   class Expression;
@@ -52,6 +55,8 @@ namespace Symbol {
 // Operations
 namespace Symbol {
   namespace Impl_ {
+    size_t byte(Type type);
+
     pExp constructZero();
     pExp constructOne();
     pExp constructCONST(const double c);
@@ -130,22 +135,31 @@ namespace Symbol {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-enum class Symbol::Impl_::Operator {
-  CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
+enum class Symbol::Impl_::Type {
+  INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT, DOUBLE
 };
 
 class Symbol::Impl_::Data {
   Shape shape_;
-  std::shared_ptr<double> pData_;
+  Type type_;
+  std::shared_ptr<uint8_t> pData_;
+
+  void allocate();
+  void assign(double value);
 public:
   // Scalar Initialization
-  Data(double v);
+  Data(double v=0, Type=Type::DOUBLE);
   // Non-scalar Initialization
-  Data(Shape s, double v);
+  Data(Shape s, double v=0, Type=Type::DOUBLE);
 
-  size_t size() const;
+  size_t numel() const;
+  size_t byte() const;
 
   friend std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
+};
+
+enum class Symbol::Impl_::Operator {
+  CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
 };
 
 class Symbol::Impl_::Exp {
@@ -234,6 +248,111 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+size_t Symbol::Impl_::byte(Type type) {
+  switch(type) {
+  case Type::INT8:
+  case Type::UINT8:
+    return 1;
+  case Type::INT16:
+  case Type::UINT16:
+    return 2;
+  case Type::INT32:
+  case Type::UINT32:
+  case Type::FLOAT:
+    return 4;
+  case Type::INT64:
+  case Type::UINT64:
+  case Type::DOUBLE:
+    return 8;
+  }
+}
+
+Symbol::Impl_::Data::Data(double value, Type dt)
+  : shape_({1})
+  , type_(dt)
+  , pData_()
+{
+  allocate();
+  assign(value);
+}
+
+void Symbol::Impl_::Data::assign(double value) {
+  auto unit = Impl_::byte(type_);
+  auto pVal = pData_.get();
+  for (size_t i = 0; i < numel(); ++i) {
+    *(double*)pVal = value;
+    pVal += unit;
+  }
+}
+
+void Symbol::Impl_::Data::allocate() {
+  pData_ = std::shared_ptr<uint8_t>
+    (new uint8_t[byte()], [](uint8_t* p){delete[] p;});
+}
+
+Symbol::Impl_::Data::Data(Shape shape, double value, Type type)
+  : shape_(shape)
+  , type_(type)
+  , pData_()
+{
+  allocate();
+  assign(value);
+}
+
+size_t Symbol::Impl_::Data::numel() const {
+  size_t ret = 1;
+  for (auto& s : shape_) {
+    ret *= s;
+  }
+  return ret;
+}
+
+size_t Symbol::Impl_::Data::byte() const {
+  return Impl_::byte(type_) * numel();
+}
+/*
+void printTensor(std::ostream& o, size_t unit, uint8_t* &pData, const uint32_t numel) {
+  o << *pData;
+  for (uint32_t i = 1; i < numel; ++i) {
+    ++pData;
+    o << ", " << *pData;
+  }
+  ++pData;
+  o << "\n";
+}
+
+void printTensor(std::ostream& o, uint8_t* &pData, size_t unit, const uint32_t nRow, const uint32_t nCol) {
+  for (uint32_t i = 0; i < nRow; ++i) {
+    printTensor(o, pData, nCol);
+  }
+}
+
+std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
+  uint8_t* pData = d.pData_.get();
+  auto unit = Impl_::byte(d.type_);
+  switch(d.shape_.size()) {
+  case 0:
+    break;
+  case 1:
+    printTensor(o, pData, unit, d.shape_[0]);
+    break;
+  case 2:
+    printTensor(o, pData, unit, d.shape_[0], d.shape_[1]);
+    break;
+  case 3:
+    for (size_t i0 = 0; i0 < d.shape_[0]; ++i0) {
+      o << "[" << i0 << ", :, :] \n";
+      printTensor(o, pData, unit, d.shape_[1], d.shape_[2]);
+      o << "\n";
+    }
+    break;
+  default:
+    o << "Not Implemented Yet.\n";
+  }
+  return o;
+}
+*/
+////////////////////////////////////////////////////////////////////////////////
 struct Symbol::Impl_::compareOperands {
   inline bool operator() (const pExp& e1, const pExp& e2) const {
     auto const1 = e1->isConst(), const2 = e2->isConst();
@@ -246,69 +365,6 @@ struct Symbol::Impl_::compareOperands {
     }
   }
 };
-
-Symbol::Impl_::Data::Data(double value)
-  : shape_({1})
-  , pData_(std::make_shared<double>(value))
-{}
-
-Symbol::Impl_::Data::Data(Shape shape, double value)
-  : shape_(shape)
-  , pData_(new double[size()], [](double* p){delete[] p;})
-{
-  double* pData = pData_.get();
-  for(size_t i = 0; i < size(); ++i) {
-    pData[i] = value;
-  }
-}
-
-size_t Symbol::Impl_::Data::size() const {
-  size_t numel = 1;
-  for (auto& s : shape_) {
-    numel *= s;
-  }
-  return numel;
-}
-
-void printTensor(std::ostream& o, double* &pData, const uint32_t numel) {
-  o << *pData;
-  for (uint32_t i = 1; i < numel; ++i) {
-    ++pData;
-    o << ", " << *pData;
-  }
-  ++pData;
-  o << "\n";
-}
-
-void printTensor(std::ostream& o, double* &pData, const uint32_t  nRow, const uint32_t nCol) {
-  for (uint32_t i = 0; i < nRow; ++i) {
-    printTensor(o, pData, nCol);
-  }
-}
-
-std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
-  double* pData = d.pData_.get();
-  switch(d.shape_.size()) {
-  case 0:
-    break;
-  case 1:
-    printTensor(o, pData, d.shape_[0]);
-    break;
-  case 2:
-    printTensor(o, pData, d.shape_[0], d.shape_[1]);
-    break;
-  case 3:
-    for (size_t i0 = 0; i0 < d.shape_[0]; ++i0) {
-      o << "[" << i0 << ", :, :] \n";
-      printTensor(o, pData, d.shape_[1], d.shape_[2]);
-      o << "\n";
-    }
-    break;
-  default:
-    o << "Not Implemented Yet.\n";
-  }
-  return o;
-}
 
 Symbol::Impl_::Exp::Exp(double value)
   : name_()

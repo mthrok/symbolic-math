@@ -209,9 +209,11 @@ TEST(Data, Print) {
   Data mat2({2, 3}, 23);
   Data mat3({5, 3, 4}, 534);
   Data mat4({2, 3, 4, 5}, 2345);
+  /*
   std::cout << scalar << "\n";
   std::cout << mat1 << "\n";
   std::cout << mat2 << "\n";
   std::cout << mat3 << "\n";
   std::cout << mat4 << "\n";
+  */
 }
