@@ -55,8 +55,20 @@ namespace Symbol {
 // Operations
 namespace Symbol {
   namespace Impl_ {
-    size_t byte(Type type);
+    // Support functions for Data
+    size_t byte(const Type& type);
+    std::string type2str(const Type &t);
 
+    template<typename type> std::ostream& printArray1D
+    (std::ostream& o, type* pData, size_t numel, bool encloseBracket);
+
+    template<typename type> std::ostream& printArray2D
+    (std::ostream& o, type* pData, size_t row, size_t col, bool encloseBracket);
+
+    template<typename type> std::ostream& printArray3D
+    (std::ostream& o, type* pData, size_t row, size_t col, size_t  channel, bool encloseBracket);
+
+    // Support functions for Exp
     pExp constructZero();
     pExp constructOne();
     pExp constructCONST(const double c);
@@ -136,19 +148,25 @@ namespace Symbol {
 
 ////////////////////////////////////////////////////////////////////////////////
 enum class Symbol::Impl_::Type {
-  INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT, DOUBLE
+  NONE, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT, DOUBLE
 };
 
 class Symbol::Impl_::Data {
-  Shape shape_;
   Type type_;
-  std::shared_ptr<uint8_t> pData_;
+  Shape shape_;
+  std::shared_ptr<uint8_t> pDataRoot_;
+  uint8_t* pData_;
 
   void allocate();
   void assign(double value);
+
+  // View initialization.
+  Data(Shape shape, Type type, std::shared_ptr<uint8_t> pDataRoot, uint8_t* pData);
 public:
+  // Initialization without size.
+  Data();
   // Scalar Initialization
-  Data(double v=0, Type=Type::DOUBLE);
+  Data(double v, Type=Type::DOUBLE);
   // Non-scalar Initialization
   Data(Shape s, double v=0, Type=Type::DOUBLE);
 
@@ -168,6 +186,7 @@ public:
 #endif
   std::string name_;
   std::shared_ptr<double> pVal_;
+  Data data_;
   Operator operator_;
   Operands operands_;
 
@@ -190,7 +209,7 @@ public:
   bool isZero() const;
   bool isOne() const;
 
-  std::string id(bool bracket=false) const;
+  std::string toStr(bool encloseBracket=false) const;
   double value() const;
 
   void assign(double value);
@@ -248,8 +267,10 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-size_t Symbol::Impl_::byte(Type type) {
-  switch(type) {
+size_t Symbol::Impl_::byte(const Type& t) {
+  switch(t) {
+  case Type::NONE:
+    return 0;
   case Type::INT8:
   case Type::UINT8:
     return 1;
@@ -267,9 +288,63 @@ size_t Symbol::Impl_::byte(Type type) {
   }
 }
 
+std::string Symbol::Impl_::type2str(const Symbol::Impl_::Type &t) {
+  switch(t) {
+  case Type::NONE:
+    return "NONE";
+  case Type::INT8:
+    return "INT8";
+  case Type::UINT8:
+    return "UINT8";
+  case Type::INT16:
+    return "INT16";
+  case Type::UINT16:
+    return "UINT16";
+  case Type::INT32:
+    return "INT32";
+  case Type::UINT32:
+    return "UINT32";
+  case Type::INT64:
+    return "INT64";
+  case Type::UINT64:
+    return "UINT64";
+  case Type::FLOAT:
+    return "FLOAT";
+  case Type::DOUBLE:
+    return "DOUBLE";
+  }
+}
+
+Symbol::Impl_::Data::Data()
+  : type_(Type::NONE)
+  , shape_()
+  , pDataRoot_()
+  , pData_()
+{}
+
+Symbol::Impl_::Data::Data(
+  Shape shape, Type type,
+  std::shared_ptr<uint8_t> pDataRoot, uint8_t* pData)
+  : type_(type)
+  , shape_(shape)
+  , pDataRoot_(pDataRoot)
+  , pData_(pData)
+{}
+
 Symbol::Impl_::Data::Data(double value, Type dt)
-  : shape_({1})
-  , type_(dt)
+  : type_(dt)
+  , shape_({1})
+  , pDataRoot_()
+  , pData_()
+{
+  allocate();
+  assign(value);
+}
+
+Symbol::Impl_::Data::Data(Shape shape, double value, Type type)
+  : type_(type)
+  , shape_(shape)
+  , pDataRoot_()
   , pData_()
 {
   allocate();
@@ -278,25 +353,17 @@ Symbol::Impl_::Data::Data(double value, Type dt)
 
 void Symbol::Impl_::Data::assign(double value) {
   auto unit = Impl_::byte(type_);
-  auto pVal = pData_.get();
+  auto pBuffer = pDataRoot_.get();
   for (size_t i = 0; i < numel(); ++i) {
-    *(double*)pVal = value;
-    pVal += unit;
+    *(double*)pBuffer = value;
+    pBuffer += unit;
   }
 }
 
 void Symbol::Impl_::Data::allocate() {
-  pData_ = std::shared_ptr<uint8_t>
+  pDataRoot_ = std::shared_ptr<uint8_t>
     (new uint8_t[byte()], [](uint8_t* p){delete[] p;});
-}
-
-Symbol::Impl_::Data::Data(Shape shape, double value, Type type)
-  : shape_(shape)
-  , type_(type)
-  , pData_()
-{
-  allocate();
-  assign(value);
+  pData_ = pDataRoot_.get();
 }
 
 size_t Symbol::Impl_::Data::numel() const {
@@ -310,48 +377,198 @@ size_t Symbol::Impl_::Data::numel() const {
 size_t Symbol::Impl_::Data::byte() const {
   return Impl_::byte(type_) * numel();
 }
-/*
-void printTensor(std::ostream& o, size_t unit, uint8_t* &pData, const uint32_t numel) {
-  o << *pData;
-  for (uint32_t i = 1; i < numel; ++i) {
-    ++pData;
-    o << ", " << *pData;
-  }
-  ++pData;
-  o << "\n";
-}
 
-void printTensor(std::ostream& o, uint8_t* &pData, size_t unit, const uint32_t nRow, const uint32_t nCol) {
-  for (uint32_t i = 0; i < nRow; ++i) {
-    printTensor(o, pData, nCol);
+template <typename type>
+std::ostream& Symbol::Impl_::printArray1D(std::ostream& o, type* pData, size_t numel, bool encloseBracket) {
+  if (encloseBracket) {
+    o << "[";
   }
-}
+  if (numel < 11) {
+    for (size_t i = 0; i < numel; ++i) {
+      o << *pData;
+      if ( i != numel - 1) {
+        o << ", ";
+      }
+      pData++;
+    }
+  } else {
+    for (size_t i = 0; i < numel; ++i) {
+      if (i == 0 || i == 1 || i == numel -1) {
+        o << *pData;
+        if ( i != numel - 1) {
+          o << ", ";
+        }
+        pData++;
+      } else if (i == 2) {
+        o << "..., ";
+      }
+    }
+  }
+  if (encloseBracket) {
+    o << "]";
+  }
+  return o;
+};
 
-std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
-  uint8_t* pData = d.pData_.get();
-  auto unit = Impl_::byte(d.type_);
-  switch(d.shape_.size()) {
-  case 0:
-    break;
-  case 1:
-    printTensor(o, pData, unit, d.shape_[0]);
-    break;
-  case 2:
-    printTensor(o, pData, unit, d.shape_[0], d.shape_[1]);
-    break;
-  case 3:
-    for (size_t i0 = 0; i0 < d.shape_[0]; ++i0) {
-      o << "[" << i0 << ", :, :] \n";
-      printTensor(o, pData, unit, d.shape_[1], d.shape_[2]);
+template <typename type>
+std::ostream& Symbol::Impl_::printArray2D(std::ostream& o, type* pData, size_t row, size_t col, bool encloseBracket) {
+  if (encloseBracket) {
+    o << "[\n";
+  }
+  for (size_t r = 0; r < row; ++r) {
+    o << "  ";
+    printArray1D(o, pData, col, false);
+    o << "\n";
+  }
+  if (encloseBracket) {
+    o << "]\n";
+  }
+  return o;
+};
+
+template <typename type>
+std::ostream& Symbol::Impl_::printArray3D(std::ostream& o, type* pData, size_t row, size_t col, size_t channel, bool encloseBracket) {
+  if (encloseBracket) {
+    o << "[\n";
+  }
+  for (size_t c = 0; c < channel; ++c) {
+    o << "  (:, :, " << c << ")\n";
+    printArray2D(o, pData, row, col, false);
+    if (c != channel -1) {
       o << "\n";
     }
-    break;
-  default:
-    o << "Not Implemented Yet.\n";
+  }
+  if (encloseBracket) {
+    o << "]\n";
+  }
+  return o;
+};
+
+std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
+  if (d.type_ == Type::NONE) {
+    o << "Abstract Tensor";
+    return o;
+  }
+  auto nAxis = d.shape_.size();
+  o << "Tensor {dtype: " << type2str(d.type_) << ", shape: (";
+  for (size_t i = 0; i < nAxis; ++i) {
+    o << d.shape_[i];
+    if (i != d.shape_.size() -1) {
+      o << ", ";
+    }
+  }
+  o << ")}\n";
+  if (1 == nAxis) {
+    switch(d.type_) {
+    case Type::NONE:
+      break;
+    case Type::INT8:
+      printArray1D<int8_t>(o, (int8_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::UINT8:
+      printArray1D<uint8_t>(o, (uint8_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::INT16:
+      printArray1D<int16_t>(o, (int16_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::UINT16:
+      printArray1D<uint16_t>(o, (uint16_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::INT32:
+      printArray1D<int32_t>(o, (int32_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::UINT32:
+      printArray1D<uint32_t>(o, (uint32_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::INT64:
+      printArray1D<int64_t>(o, (int64_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::UINT64:
+      printArray1D<uint64_t>(o, (uint64_t*)d.pData_, d.numel(), true);
+      break;
+    case Type::FLOAT:
+      printArray1D<float>(o, (float*)d.pData_, d.numel(), true);
+      break;
+    case Type::DOUBLE:
+      printArray1D<double>(o, (double*)d.pData_, d.numel(), true);
+      break;
+    }
+  }
+  if (2 == nAxis) {
+    switch(d.type_) {
+    case Type::NONE:
+      break;
+    case Type::INT8:
+      printArray2D<int8_t>(o, (int8_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::UINT8:
+      printArray2D<uint8_t>(o, (uint8_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::INT16:
+      printArray2D<int16_t>(o, (int16_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::UINT16:
+      printArray2D<uint16_t>(o, (uint16_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::INT32:
+      printArray2D<int32_t>(o, (int32_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::UINT32:
+      printArray2D<uint32_t>(o, (uint32_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::INT64:
+      printArray2D<int64_t>(o, (int64_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::UINT64:
+      printArray2D<uint64_t>(o, (uint64_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::FLOAT:
+      printArray2D<float>(o, (float*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    case Type::DOUBLE:
+      printArray2D<double>(o, (double*)d.pData_, d.shape_[0], d.shape_[1], true);
+      break;
+    }
+  }
+  if (3 == nAxis) {
+    switch(d.type_) {
+    case Type::NONE:
+      break;
+    case Type::INT8:
+      printArray3D<int8_t>(o, (int8_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::UINT8:
+      printArray3D<uint8_t>(o, (uint8_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::INT16:
+      printArray3D<int16_t>(o, (int16_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::UINT16:
+      printArray3D<uint16_t>(o, (uint16_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::INT32:
+      printArray3D<int32_t>(o, (int32_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::UINT32:
+      printArray3D<uint32_t>(o, (uint32_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::INT64:
+      printArray3D<int64_t>(o, (int64_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::UINT64:
+      printArray3D<uint64_t>(o, (uint64_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::FLOAT:
+      printArray3D<float>(o, (float*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    case Type::DOUBLE:
+      printArray3D<double>(o, (double*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      break;
+    }
   }
   return o;
 }
-*/
+
 ////////////////////////////////////////////////////////////////////////////////
 struct Symbol::Impl_::compareOperands {
   inline bool operator() (const pExp& e1, const pExp& e2) const {
@@ -361,7 +578,7 @@ struct Symbol::Impl_::compareOperands {
     } else if (!const1 && const2) {
         return false;
     } else {
-      return e1->id() < e2->id();
+      return e1->toStr(false) < e2->toStr(false);
     }
   }
 };
@@ -369,6 +586,7 @@ struct Symbol::Impl_::compareOperands {
 Symbol::Impl_::Exp::Exp(double value)
   : name_()
   , pVal_(std::make_shared<double>(value))
+  , data_(value, Type::DOUBLE)
   , operator_(Operator::CONST)
   , operands_()
 {
@@ -378,6 +596,7 @@ Symbol::Impl_::Exp::Exp(double value)
 Symbol::Impl_::Exp::Exp(std::string name)
   : name_(name)
   , pVal_()
+  , data_()
   , operator_(Operator::VARIABLE)
   , operands_()
 {
@@ -387,6 +606,7 @@ Symbol::Impl_::Exp::Exp(std::string name)
 Symbol::Impl_::Exp::Exp(std::string name, double value)
   : name_(name)
   , pVal_(std::make_shared<double>(value))
+  , data_(value, Type::DOUBLE)
   , operator_(Operator::VARIABLE)
   , operands_()
 {
@@ -396,6 +616,7 @@ Symbol::Impl_::Exp::Exp(std::string name, double value)
 Symbol::Impl_::Exp::Exp(Operator oprtr, Operands oprnds)
   : name_()
   , pVal_()
+  , data_()
   , operator_(oprtr)
   , operands_(oprnds)
 {
@@ -935,16 +1156,16 @@ Symbol::pExp Symbol::Impl_::simplify(pExp e) {
 		 e->operands_.begin(), Impl_::simplify);
   std::string before;
   do {
-    before = e->id();
+    before = e->toStr(false);
     e = flatten(e);
     e = expand(e);
   }
-  while(before != e->id());
+  while(before != e->toStr(false));
   do {
-    before = e->id();
+    before = e->toStr(false);
     e = merge(e);
   }
-  while(before != e->id());
+  while(before != e->toStr(false));
   e = sort(e);
   return e;
 }
@@ -999,7 +1220,7 @@ Symbol::pExp Symbol::Impl_::differentiate(pExp y, Operand x) {
   }
 }
 
-std::string Symbol::Impl_::Exp::id(bool bracket) const {
+std::string Symbol::Impl_::Exp::toStr(bool bracket) const {
   std::string ret;
   switch(operator_) {
   case Operator::CONST:
@@ -1026,17 +1247,17 @@ std::string Symbol::Impl_::Exp::id(bool bracket) const {
   case Operator::VARIABLE:
     return name_;
   case Operator::NEGATE:
-    ret = " - " + operands_[0]->id(true);
+    ret = " - " + operands_[0]->toStr(true);
     break;
   case Operator::ADD:
     for (auto& operand : operands_) {
       std::string append;
       if (operand->isNegative() ||
           operand->operator_ == Operator::NEGATE) {
-        append = operand->id(false);
+        append = operand->toStr(false);
         ret += append;
       } else {
-        append = operand->id(true);
+        append = operand->toStr(true);
         if (0 != ret.size())
           ret += " + ";
         ret += append;
@@ -1045,7 +1266,7 @@ std::string Symbol::Impl_::Exp::id(bool bracket) const {
     break;
   case Operator::MULTIPLY:
     for (auto& operand : operands_) {
-      auto append = operand->id(true);
+      auto append = operand->toStr(true);
       if (0 != ret.size()) {
         ret += " * ";
       }
@@ -1053,8 +1274,8 @@ std::string Symbol::Impl_::Exp::id(bool bracket) const {
     }
     break;
   case Operator::POWER: {
-    auto base = operands_[0]->id(true);
-    auto expo = operands_[1]->id(true);
+    auto base = operands_[0]->toStr(true);
+    auto expo = operands_[1]->toStr(true);
     std::string ret = base + " ^ " + expo;
     if (bracket) {
       ret = "(" + ret + ")";
@@ -1062,7 +1283,7 @@ std::string Symbol::Impl_::Exp::id(bool bracket) const {
     return ret;
   }
   case Operator::LOG:
-    return "log(" + operands_[0]->id(false) + ")";
+    return "log(" + operands_[0]->toStr(false) + ")";
   }
   if (bracket) {
     ret = "(" + ret + ")";
@@ -1159,7 +1380,7 @@ bool Symbol::operator == (const Expression& e1, const Expression& e2) {
 }
 
 bool Symbol::operator == (const Expression& e, const std::string strExp) {
-  return e.pExp_->id(false) == strExp;
+  return e.pExp_->toStr(false) == strExp;
 }
 
 bool Symbol::operator == (const std::string strExp, const Expression& e) {
@@ -1275,5 +1496,5 @@ double Symbol::Expression::evaluate() const {
 }
 
 std::ostream& Symbol::operator <<(std::ostream& o, const Expression &e) {
-  return o << e.pExp_->id(false);
+  return o << e.pExp_->toStr(false);
 }
