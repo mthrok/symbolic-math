@@ -170,6 +170,8 @@ public:
   // Non-scalar Initialization
   Data(Shape s, double v=0, Type=Type::DOUBLE);
 
+  void assertDataFormatValidity() const;
+
   size_t numel() const;
   size_t byte() const;
 
@@ -320,7 +322,9 @@ Symbol::Impl_::Data::Data()
   , shape_()
   , pDataRoot_()
   , pData_()
-{}
+{
+  assertDataFormatValidity();
+}
 
 Symbol::Impl_::Data::Data(
   Shape shape, Type type,
@@ -329,7 +333,9 @@ Symbol::Impl_::Data::Data(
   , shape_(shape)
   , pDataRoot_(pDataRoot)
   , pData_(pData)
-{}
+{
+  assertDataFormatValidity();
+}
 
 Symbol::Impl_::Data::Data(double value, Type dt)
   : type_(dt)
@@ -337,6 +343,7 @@ Symbol::Impl_::Data::Data(double value, Type dt)
   , pDataRoot_()
   , pData_()
 {
+  assertDataFormatValidity();
   allocate();
   assign(value);
 }
@@ -347,8 +354,17 @@ Symbol::Impl_::Data::Data(Shape shape, double value, Type type)
   , pDataRoot_()
   , pData_()
 {
+  assertDataFormatValidity();
   allocate();
   assign(value);
+}
+
+void Symbol::Impl_::Data::assertDataFormatValidity() const {
+  if (type_ == Type::NONE) {
+    if (shape_.size()) {
+      LOG_AND_THROW("NONE type Data structure cannot have element.");
+    }
+  }
 }
 
 void Symbol::Impl_::Data::assign(double value) {

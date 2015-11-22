@@ -204,6 +204,7 @@ TEST(Impl_, PolynomialConstruction) {
 }
 
 TEST(Data, Print) {
+  ASSERT_THROW(Data(0.0, Type::NONE), std::runtime_error);
   Data abstract;
   Data scalar(3.0);
   Data vec1({2}, 2);
