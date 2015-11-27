@@ -202,16 +202,28 @@ TEST(Impl_, PolynomialConstruction) {
   ASSERT_THROW(constructLOG(-one), std::runtime_error);
   ASSERT_NO_THROW(constructLOG(-x));
 }
+/*
+TEST(Data, Initialization) {
+  ASSERT_THROW(Tensor(0.0, Type::NONE), std::runtime_error);
+}
+*/
+TEST(Tensor, Slice) {
+  Tensor mat({2, 3, 4});
 
-TEST(Data, Print) {
-  ASSERT_THROW(Data(0.0, Type::NONE), std::runtime_error);
-  Data abstract;
-  Data scalar(3.0);
-  Data vec1({2}, 2);
-  Data vec2({11}, 2);
-  Data mat2({2, 3}, 23);
-  Data mat3({5, 3, 4}, 534);
-  Data mat4({2, 3, 4, 5}, 2345);
+  std::cout << mat << "\n";
+  // std::cout << mat.slice(0) << "\n";
+
+
+}
+/*
+TEST(Tensor, Print) {
+  Tensor abstract;
+  Tensor scalar(3.0);
+  Tensor vec1({2}, 2);
+  Tensor vec2({11}, 2);
+  Tensor mat2({2, 3}, 23);
+  Tensor mat3({5, 3, 4}, 534);
+  Tensor mat4({2, 3, 4, 5}, 2345);
 
   std::cout << abstract << "\n";
   std::cout << scalar << "\n";
@@ -222,3 +234,4 @@ TEST(Data, Print) {
   std::cout << mat4 << "\n";
 
 }
+*/

@@ -1,4 +1,5 @@
 #include <map>
+#include <cmath>
 #include <string>
 #include <vector>
 #include <memory>
@@ -34,7 +35,11 @@ namespace Symbol {
 
     enum class Type;
 
-    class Data;
+    class IndexMapper;
+
+    class Buffer;
+
+    class Tensor;
 
     enum class Operator;
 
@@ -55,18 +60,21 @@ namespace Symbol {
 // Operations
 namespace Symbol {
   namespace Impl_ {
-    // Support functions for Data
-    size_t byte(const Type& type);
+    // Support functions for Buffer class
     std::string type2str(const Type &t);
+    size_t byteSize(const Type& type, size_t nElems=1);
+    std::shared_ptr<void> constructSharedArray(Type type, size_t nElems=1);
+    size_t numel(Shape shape);
 
+    // Support functions for Tensor class
     template<typename type> std::ostream& printArray1D
-    (std::ostream& o, type* pData, size_t numel, bool encloseBracket);
+    (std::ostream& o, type* pBuffer, size_t numel, bool encloseBracket);
 
     template<typename type> std::ostream& printArray2D
-    (std::ostream& o, type* pData, size_t row, size_t col, bool encloseBracket);
+    (std::ostream& o, type* pBuffer, size_t row, size_t col, bool encloseBracket);
 
     template<typename type> std::ostream& printArray3D
-    (std::ostream& o, type* pData, size_t row, size_t col, size_t  channel, bool encloseBracket);
+    (std::ostream& o, type* pBuffer, size_t row, size_t col, size_t  channel, bool encloseBracket);
 
     // Support functions for Exp
     pExp constructZero();
@@ -113,7 +121,7 @@ namespace Symbol {
     pExp operator / (const Operand o1, const Operand o2);
     pExp log (const Operand o);
 
-    std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
+    std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Tensor &t);
   };
 
   bool operator == (const Expression &e1, const Expression &e2);
@@ -151,36 +159,50 @@ enum class Symbol::Impl_::Type {
   NONE, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT, DOUBLE
 };
 
-class Symbol::Impl_::Data {
-  Type type_;
-  Shape shape_;
-  std::shared_ptr<uint8_t> pDataRoot_;
-  uint8_t* pData_;
+class Symbol::Impl_::IndexMapper {
+  std::vector<size_t> indices_;
 
-  void allocate();
-  void assign(double value);
-
-  // View initialization.
-  Data(Shape shape, Type type, std::shared_ptr<uint8_t> pDataRoot, uint8_t* pData);
+  void initIndices(size_t start, size_t stop, size_t step);
 public:
-  // Initialization without size.
-  Data();
-  // Scalar Initialization
-  Data(double v, Type=Type::DOUBLE);
-  // Non-scalar Initialization
-  Data(Shape s, double v=0, Type=Type::DOUBLE);
+  IndexMapper(size_t numel=0);
+  IndexMapper(size_t start, size_t stop, size_t step);
+  IndexMapper(std::vector<size_t> indices);
 
-  void assertDataFormatValidity() const;
+  size_t operator[] (int32_t) const;
 
-  size_t numel() const;
-  size_t byte() const;
+  std::vector<size_t>::const_iterator begin() const;
+  std::vector<size_t>::const_iterator end() const;
+};
 
-  friend std::ostream& operator << (std::ostream& o, const Symbol::Impl_::Data &d);
+class Symbol::Impl_::Buffer {
+  Type type_;
+  size_t nElems_;
+  std::shared_ptr<void> pData_;
+public:
+  Buffer();
+  Buffer(Shape shape, Type type);
+  Buffer(size_t nElems, Type type=Type::DOUBLE);
+
+  friend Tensor;
+  friend std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Tensor &d);
 };
 
 enum class Symbol::Impl_::Operator {
   CONST, VARIABLE, NEGATE, ADD, MULTIPLY, POWER, LOG
 };
+
+class Symbol::Impl_::Tensor {
+  Type type_;
+  Shape shape_;
+  Buffer buffer_;
+  Tensor(Type type, Shape shape, Buffer buffer);
+public:
+  Tensor();
+  Tensor(Shape shape, Type type=Type::DOUBLE);
+
+  friend std::ostream& operator << (std::ostream& o, const Tensor &d);
+};
+
 
 class Symbol::Impl_::Exp {
 #ifdef TEST_IMPL_
@@ -188,10 +210,8 @@ public:
 #endif
   std::string name_;
   std::shared_ptr<double> pVal_;
-  Data data_;
   Operator operator_;
   Operands operands_;
-
 public:
   // Constant constructor
   Exp(double value);
@@ -269,25 +289,47 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-size_t Symbol::Impl_::byte(const Type& t) {
-  switch(t) {
-  case Type::NONE:
-    return 0;
-  case Type::INT8:
-  case Type::UINT8:
-    return 1;
-  case Type::INT16:
-  case Type::UINT16:
-    return 2;
-  case Type::INT32:
-  case Type::UINT32:
-  case Type::FLOAT:
-    return 4;
-  case Type::INT64:
-  case Type::UINT64:
-  case Type::DOUBLE:
-    return 8;
+Symbol::Impl_::IndexMapper::IndexMapper(size_t numel)
+  : indices_()
+{
+  initIndices(0, numel, 1);
+}
+
+Symbol::Impl_::IndexMapper::IndexMapper(size_t start, size_t stop, size_t step)
+  : indices_()
+{
+  initIndices(start, stop, step);
+}
+
+Symbol::Impl_::IndexMapper::IndexMapper(std::vector<size_t> indices)
+  : indices_(indices)
+{}
+
+void Symbol::Impl_::IndexMapper::IndexMapper::initIndices(size_t start, size_t stop, size_t step) {
+  indices_.clear();
+  for (size_t i=start; i < stop; i+= step) {
+    indices_.push_back(i);
   }
+}
+
+size_t Symbol::Impl_::IndexMapper::operator[] (int32_t ind) const {
+  size_t n_indices = indices_.size();
+  while (index < 0) {
+    ind += n_indices;
+  }
+  size_t index = ind;
+  if (index >= n_indices) {
+    index = index % n_indices;
+  }
+  return indices_[index];
+}
+
+std::vector<size_t>::const_iterator Symbol::Impl_::IndexMapper::begin() const {
+  return indices_.begin();
+}
+
+std::vector<size_t>::const_iterator Symbol::Impl_::IndexMapper::end() const {
+  return indices_.end();
 }
 
 std::string Symbol::Impl_::type2str(const Symbol::Impl_::Type &t) {
@@ -317,83 +359,92 @@ std::string Symbol::Impl_::type2str(const Symbol::Impl_::Type &t) {
   }
 }
 
-Symbol::Impl_::Data::Data()
-  : type_(Type::NONE)
-  , shape_()
-  , pDataRoot_()
-  , pData_()
-{
-  assertDataFormatValidity();
-}
-
-Symbol::Impl_::Data::Data(
-  Shape shape, Type type,
-  std::shared_ptr<uint8_t> pDataRoot, uint8_t* pData)
-  : type_(type)
-  , shape_(shape)
-  , pDataRoot_(pDataRoot)
-  , pData_(pData)
-{
-  assertDataFormatValidity();
-}
-
-Symbol::Impl_::Data::Data(double value, Type dt)
-  : type_(dt)
-  , shape_({1})
-  , pDataRoot_()
-  , pData_()
-{
-  assertDataFormatValidity();
-  allocate();
-  assign(value);
-}
-
-Symbol::Impl_::Data::Data(Shape shape, double value, Type type)
-  : type_(type)
-  , shape_(shape)
-  , pDataRoot_()
-  , pData_()
-{
-  assertDataFormatValidity();
-  allocate();
-  assign(value);
-}
-
-void Symbol::Impl_::Data::assertDataFormatValidity() const {
-  if (type_ == Type::NONE) {
-    if (shape_.size()) {
-      LOG_AND_THROW("NONE type Data structure cannot have element.");
-    }
+size_t Symbol::Impl_::byteSize(const Type& type, size_t nElems) {
+  switch(type) {
+  case Type::NONE:
+    return 0;
+  case Type::INT8:
+  case Type::UINT8:
+    return nElems;
+  case Type::INT16:
+  case Type::UINT16:
+    return nElems * 2;
+  case Type::INT32:
+  case Type::UINT32:
+  case Type::FLOAT:
+    return nElems * 4;
+  case Type::INT64:
+  case Type::UINT64:
+  case Type::DOUBLE:
+    return nElems * 8;
   }
 }
 
-void Symbol::Impl_::Data::assign(double value) {
-  auto unit = Impl_::byte(type_);
-  auto pBuffer = pDataRoot_.get();
-  for (size_t i = 0; i < numel(); ++i) {
-    *(double*)pBuffer = value;
-    pBuffer += unit;
-  }
+std::shared_ptr<void> Symbol::Impl_::constructSharedArray(Type type, size_t nElems) {
+  auto destractor = [](void* p){ delete[] (uint8_t*)p; };
+  return std::shared_ptr<void>((void*)new uint8_t[byteSize(type, nElems)], destractor);
 }
 
-void Symbol::Impl_::Data::allocate() {
-  pDataRoot_ = std::shared_ptr<uint8_t>
-    (new uint8_t[byte()], [](uint8_t* p){delete[] p;});
-  pData_ = pDataRoot_.get();
-}
-
-size_t Symbol::Impl_::Data::numel() const {
+size_t Symbol::Impl_::numel(Shape shape) {
   size_t ret = 1;
-  for (auto& s : shape_) {
+  for (auto& s : shape) {
     ret *= s;
   }
   return ret;
+};
+
+Symbol::Impl_::Buffer::Buffer()
+  : type_(Type::NONE)
+  , nElems_(0)
+  , pData_()
+{}
+
+Symbol::Impl_::Buffer::Buffer(Shape shape, Type type)
+  : type_(type)
+  , nElems_(numel(shape))
+  , pData_(constructSharedArray(type_, nElems_))
+{}
+
+Symbol::Impl_::Buffer::Buffer(size_t nElems, Type type)
+  : type_(type)
+  , nElems_(nElems)
+  , pData_(constructSharedArray(type_, nElems_))
+{}
+
+Symbol::Impl_::Tensor::Tensor()
+  : type_(Type::NONE)
+  , shape_()
+  , buffer_()
+{}
+
+Symbol::Impl_::Tensor::Tensor(Shape shape, Type type)
+  : type_(type)
+  , shape_(shape)
+  , buffer_()
+{}
+
+
+/*
+Symbol::Impl_::Buffer Symbol::Impl_::Buffer::slice(int32_t index) const {
+  Shape shape;
+  std::vector<IndexMapper> indices;
+  shape.push_back(1);
+  indices.push_back(IndexMapper(index, index+1, 1));
+  for (size_t i = 1; i < indices_.size(); ++i) {
+    indices.push_back(indices_[i]);
+  }
+  for (size_t i = 1; i < shape_.size(); ++i) {
+    shape.push_back(shape_[i]);
+  }
+  return Buffer(type_, shape, indices, pDataRoot_);
 }
 
-size_t Symbol::Impl_::Data::byte() const {
-  return Impl_::byte(type_) * numel();
+Symbol::Impl_::Buffer Symbol::Impl_::Buffer::slice(int32_t start, int32_t stop, int32_t step) const {
+  // Create range object.
+  auto ret = *this;
+  ret.indices_[0] = IndexMapper(start, stop, step);
 }
-
+*/
 template <typename type>
 std::ostream& Symbol::Impl_::printArray1D(std::ostream& o, type* pData, size_t numel, bool encloseBracket) {
   if (encloseBracket) {
@@ -460,131 +511,146 @@ std::ostream& Symbol::Impl_::printArray3D(std::ostream& o, type* pData, size_t r
   return o;
 };
 
-std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Data &d) {
-  if (d.type_ == Type::NONE) {
+std::ostream& Symbol::Impl_::operator << (std::ostream& o, const Symbol::Impl_::Tensor &t) {
+  if (t.type_ == Type::NONE) {
     o << "Abstract Tensor";
     return o;
   }
-  auto nAxis = d.shape_.size();
-  o << "Tensor {dtype: " << type2str(d.type_) << ", shape: (";
+  auto nAxis = t.shape_.size();
+  o << "Tensor {dtype: " << type2str(t.type_) << ", shape: (";
   for (size_t i = 0; i < nAxis; ++i) {
-    o << d.shape_[i];
-    if (i != d.shape_.size() -1) {
+    o << t.shape_[i];
+    if (i != t.shape_.size() -1) {
       o << ", ";
     }
   }
   o << ")}\n";
+  auto b = t.buffer_;
   if (1 == nAxis) {
-    switch(d.type_) {
+    switch(t.type_) {
     case Type::NONE:
       break;
     case Type::INT8:
-      printArray1D<int8_t>(o, (int8_t*)d.pData_, d.numel(), true);
+      printArray1D<int8_t>(o, (int8_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::UINT8:
-      printArray1D<uint8_t>(o, (uint8_t*)d.pData_, d.numel(), true);
+      printArray1D<uint8_t>(o, (uint8_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::INT16:
-      printArray1D<int16_t>(o, (int16_t*)d.pData_, d.numel(), true);
+      printArray1D<int16_t>(o, (int16_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::UINT16:
-      printArray1D<uint16_t>(o, (uint16_t*)d.pData_, d.numel(), true);
+      printArray1D<uint16_t>(o, (uint16_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::INT32:
-      printArray1D<int32_t>(o, (int32_t*)d.pData_, d.numel(), true);
+      printArray1D<int32_t>(o, (int32_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::UINT32:
-      printArray1D<uint32_t>(o, (uint32_t*)d.pData_, d.numel(), true);
+      printArray1D<uint32_t>(o, (uint32_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::INT64:
-      printArray1D<int64_t>(o, (int64_t*)d.pData_, d.numel(), true);
+      printArray1D<int64_t>(o, (int64_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::UINT64:
-      printArray1D<uint64_t>(o, (uint64_t*)d.pData_, d.numel(), true);
+      printArray1D<uint64_t>(o, (uint64_t*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::FLOAT:
-      printArray1D<float>(o, (float*)d.pData_, d.numel(), true);
+      printArray1D<float>(o, (float*)b.pData_.get(), b.nElems_, true);
       break;
     case Type::DOUBLE:
-      printArray1D<double>(o, (double*)d.pData_, d.numel(), true);
+      printArray1D<double>(o, (double*)b.pData_.get(), b.nElems_, true);
       break;
     }
   }
   if (2 == nAxis) {
-    switch(d.type_) {
+    switch(t.type_) {
     case Type::NONE:
       break;
     case Type::INT8:
-      printArray2D<int8_t>(o, (int8_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<int8_t>(o, (int8_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::UINT8:
-      printArray2D<uint8_t>(o, (uint8_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<uint8_t>(o, (uint8_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::INT16:
-      printArray2D<int16_t>(o, (int16_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<int16_t>(o, (int16_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::UINT16:
-      printArray2D<uint16_t>(o, (uint16_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<uint16_t>(o, (uint16_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::INT32:
-      printArray2D<int32_t>(o, (int32_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<int32_t>(o, (int32_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::UINT32:
-      printArray2D<uint32_t>(o, (uint32_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<uint32_t>(o, (uint32_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::INT64:
-      printArray2D<int64_t>(o, (int64_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<int64_t>(o, (int64_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::UINT64:
-      printArray2D<uint64_t>(o, (uint64_t*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<uint64_t>(o, (uint64_t*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::FLOAT:
-      printArray2D<float>(o, (float*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<float>(o, (float*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     case Type::DOUBLE:
-      printArray2D<double>(o, (double*)d.pData_, d.shape_[0], d.shape_[1], true);
+      printArray2D<double>(o, (double*)b.pData_.get(), t.shape_[0], t.shape_[1], true);
       break;
     }
   }
   if (3 == nAxis) {
-    switch(d.type_) {
+    switch(t.type_) {
     case Type::NONE:
       break;
     case Type::INT8:
-      printArray3D<int8_t>(o, (int8_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<int8_t>(o, (int8_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::UINT8:
-      printArray3D<uint8_t>(o, (uint8_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<uint8_t>(o, (uint8_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::INT16:
-      printArray3D<int16_t>(o, (int16_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<int16_t>(o, (int16_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::UINT16:
-      printArray3D<uint16_t>(o, (uint16_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<uint16_t>(o, (uint16_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::INT32:
-      printArray3D<int32_t>(o, (int32_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<int32_t>(o, (int32_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::UINT32:
-      printArray3D<uint32_t>(o, (uint32_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<uint32_t>(o, (uint32_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::INT64:
-      printArray3D<int64_t>(o, (int64_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<int64_t>(o, (int64_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::UINT64:
-      printArray3D<uint64_t>(o, (uint64_t*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<uint64_t>(o, (uint64_t*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::FLOAT:
-      printArray3D<float>(o, (float*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<float>(o, (float*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     case Type::DOUBLE:
-      printArray3D<double>(o, (double*)d.pData_, d.shape_[0], d.shape_[1], d.shape_[2], true);
+      printArray3D<double>(o, (double*)b.pData_.get(), t.shape_[0], t.shape_[1], t.shape_[2], true);
       break;
     }
   }
   return o;
 }
 
+/*
+Symbol::Impl_::Tensor Symbol::Impl_::zeros(Shape shape, Type type) {
+  return Tensor(shape, 0, type);
+}
+
+Symbol::Impl_::Tensor Symbol::Impl_::ones(Shape shape, Type type) {
+  return Tensor(shape, 1, type);
+}
+
+Symbol::Impl_::Tensor Symbol::Impl_::eye(Shape shape, Type type) {
+  auto ret = Tensor(shape, 0, type);
+  // TODO
+}
+*/
 ////////////////////////////////////////////////////////////////////////////////
 struct Symbol::Impl_::compareOperands {
   inline bool operator() (const pExp& e1, const pExp& e2) const {
@@ -602,7 +668,6 @@ struct Symbol::Impl_::compareOperands {
 Symbol::Impl_::Exp::Exp(double value)
   : name_()
   , pVal_(std::make_shared<double>(value))
-  , data_(value, Type::DOUBLE)
   , operator_(Operator::CONST)
   , operands_()
 {
@@ -612,7 +677,6 @@ Symbol::Impl_::Exp::Exp(double value)
 Symbol::Impl_::Exp::Exp(std::string name)
   : name_(name)
   , pVal_()
-  , data_()
   , operator_(Operator::VARIABLE)
   , operands_()
 {
@@ -622,7 +686,6 @@ Symbol::Impl_::Exp::Exp(std::string name)
 Symbol::Impl_::Exp::Exp(std::string name, double value)
   : name_(name)
   , pVal_(std::make_shared<double>(value))
-  , data_(value, Type::DOUBLE)
   , operator_(Operator::VARIABLE)
   , operands_()
 {
@@ -632,7 +695,6 @@ Symbol::Impl_::Exp::Exp(std::string name, double value)
 Symbol::Impl_::Exp::Exp(Operator oprtr, Operands oprnds)
   : name_()
   , pVal_()
-  , data_()
   , operator_(oprtr)
   , operands_(oprnds)
 {
